@@ -24,7 +24,7 @@ Grundsatz: DECISIONS 2026-09-28a im AI-OS.
 ## 1. Installieren
 
 ```bash
-npm i "git+https://github.com/jjokkln/growcore-feedback.git#v0.1.0"
+npm i "git+https://github.com/jjokkln/growcore-feedback.git#v0.2.0"
 ```
 
 Immer auf einen **Tag** festnageln, nie auf `main`. `npm` schreibt `git+ssh://`
@@ -151,3 +151,13 @@ auslösen).
 
 Neuer Tag im Paket → in jedem Einbau `npm i "git+https://…#vX.Y.Z"`. Einbauten
 stehen in der Projektkarte `growcore-feedback` im AI-OS.
+
+## Änderungen
+
+- **v0.2.0** (2026-09-28): Eingeklappt nur noch ein Stift unten links in der
+  Projektfarbe (`--gcf-primaer`), mit Zahl der offenen Anmerkungen. KI-Fenster
+  bleibt bei „Zeigen“ offen und klappt über „Einklappen“ zu; auf dem Handy
+  schrumpft es während der Führung. „Export“ heißt jetzt „Als Text kopieren“
+  und steht in der Liste. Liste mit „Diese Seite / Alle Seiten“, ein Klick auf
+  eine Anmerkung einer anderen Seite wechselt dorthin. Liste links statt rechts.
+- **v0.1.0** (2026-09-28): erste Fassung.

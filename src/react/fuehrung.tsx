@@ -41,6 +41,18 @@ interface Stand {
   index: number;
 }
 
+/**
+ * Die Unterkante des freien Bereichs. Liegt das offene KI-Fenster quer über
+ * dem unteren Bildschirm (Handy), zählt nur, was darüber frei ist — sonst
+ * markierte die Führung eine Stelle hinter dem Fenster.
+ */
+function freiBis(): number {
+  const fenster = document.getElementById("gcf-ki-fenster");
+  const box = fenster?.getBoundingClientRect();
+  if (box && box.width > window.innerWidth * 0.6) return Math.max(120, box.top - 8);
+  return window.innerHeight;
+}
+
 export function starteFuehrung(schritte: Schritt[], ab = 0) {
   window.dispatchEvent(
     new CustomEvent<Stand>(FUEHRUNG_EREIGNIS, {
@@ -49,7 +61,16 @@ export function starteFuehrung(schritte: Schritt[], ab = 0) {
   );
 }
 
-export function Fuehrung({ ziele, onZurKiHilfe }: { ziele: ZielKatalog; onZurKiHilfe: () => void }) {
+export function Fuehrung({
+  ziele,
+  onZurKiHilfe,
+  onLaeuft,
+}: {
+  ziele: ZielKatalog;
+  onZurKiHilfe: () => void;
+  /** Meldet, ob gerade geführt wird — das KI-Fenster schrumpft dann auf dem Handy. */
+  onLaeuft?: (laeuft: boolean) => void;
+}) {
   const pfad = usePathname();
   const [stand, setStand] = useLocalStorageState<Stand | null>(STAND, null);
   const [gefunden, setGefunden] = useState<"ja" | "vorstufe" | "nein">("nein");
@@ -69,6 +90,10 @@ export function Fuehrung({ ziele, onZurKiHilfe }: { ziele: ZielKatalog; onZurKiH
     return () => window.removeEventListener(FUEHRUNG_EREIGNIS, start);
   }, [setStand]);
 
+  useEffect(() => {
+    onLaeuft?.(Boolean(stand));
+  }, [stand, onLaeuft]);
+
   const schritt = stand ? (stand.schritte[stand.index] ?? null) : null;
   const ziel: Ziel | null = schritt?.ziel ? (ziele[schritt.ziel] ?? null) : null;
 
@@ -84,11 +109,20 @@ export function Fuehrung({ ziele, onZurKiHilfe }: { ziele: ZielKatalog; onZurKiH
       setGefunden(treffer ? (treffer.vorstufe ? "vorstufe" : "ja") : "nein");
       if (treffer && treffer.el !== zuletzt) {
         zuletzt = treffer.el;
-        treffer.el.scrollIntoView({ block: "center", behavior: "smooth" });
+        const frei = freiBis();
+        if (frei < window.innerHeight) {
+          // In die Mitte des FREIEN Bereichs, nicht des Bildschirms.
+          const r = treffer.el.getBoundingClientRect();
+          window.scrollTo({ top: window.scrollY + r.top - Math.max(12, (frei - r.height) / 2), behavior: "smooth" });
+        } else {
+          treffer.el.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
       }
     };
     // Erster Lauf nicht synchron im Effekt (react-hooks/set-state-in-effect).
-    const erst = window.setTimeout(suchen, 0);
+    // 60 ms: Das KI-Fenster schrumpft erst im nächsten Render, `freiBis` soll
+    // schon die neue Höhe sehen.
+    const erst = window.setTimeout(suchen, 60);
     const takt = window.setInterval(suchen, 250);
 
     let bild = 0;
@@ -98,6 +132,7 @@ export function Fuehrung({ ziele, onZurKiHilfe }: { ziele: ZielKatalog; onZurKiH
       const box = elementRef.current?.el.getBoundingClientRect();
       if (rahmen && karte) {
         const k = karte.getBoundingClientRect();
+        const unten = freiBis();
         if (box && box.width > 0) {
           const rand = 5;
           rahmen.style.display = "block";
@@ -106,12 +141,12 @@ export function Fuehrung({ ziele, onZurKiHilfe }: { ziele: ZielKatalog; onZurKiH
           rahmen.style.height = `${Math.round(box.height + rand * 2)}px`;
           const x = Math.min(Math.max(box.left, 12), Math.max(12, window.innerWidth - k.width - 12));
           let y = box.bottom + 16;
-          if (y + k.height > window.innerHeight - 12) y = box.top - k.height - 16;
-          if (y < 12) y = Math.max(12, window.innerHeight - k.height - 12);
+          if (y + k.height > unten - 12) y = box.top - k.height - 16;
+          if (y < 12) y = Math.max(12, unten - k.height - 12);
           karte.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
         } else {
           rahmen.style.display = "none";
-          karte.style.transform = `translate3d(16px, ${Math.round(window.innerHeight - k.height - 16)}px, 0)`;
+          karte.style.transform = `translate3d(16px, ${Math.round(unten - k.height - 16)}px, 0)`;
         }
       }
       bild = requestAnimationFrame(setzen);
@@ -175,7 +210,8 @@ export function Fuehrung({ ziele, onZurKiHilfe }: { ziele: ZielKatalog; onZurKiH
         role="status"
         aria-live="polite"
         className="gcf-karte"
-        style={{ zIndex: EBENE + 1 }}
+        // Über dem KI-Fenster (2147482500), das jetzt offen bleibt.
+        style={{ zIndex: EBENE + 400 }}
       >
         <p className="gcf-eyebrow">
           KI-Hilfe · Schritt {stand.index + 1} von {stand.schritte.length}

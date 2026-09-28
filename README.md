@@ -1,7 +1,7 @@
 # @growcore/feedback
 
 Feedback-Werkzeug für GrowCore-Projekte in Entwicklung: Anmerkungen in beide
-Richtungen (kommentieren, einkreisen, antworten, abhaken, Markdown-Export) und
+Richtungen (kommentieren, einkreisen, antworten, abhaken, als Text kopieren) und
 eine KI-Hilfe. Alles landet im zentralen Eingang des Projektraums — die
 Kunden-App speichert nichts selbst.
 

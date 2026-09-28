@@ -50,6 +50,61 @@
   }
 }
 
+/* Eingeklappt: nur der Stift, unten links, in der Akzentfarbe des Projekts. */
+.gcf-stift-ecke {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2147482002;
+}
+.gcf-stift {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: var(--gcf-primaer);
+  color: var(--gcf-primaer-text);
+  /* Heller Ring: Liegt der Stift auf einer Fläche in der Akzentfarbe
+     (Fußzeile, Bandsektion), verschwände er sonst. */
+  box-shadow:
+    0 0 0 2px var(--gcf-primaer-text),
+    0 6px 18px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.gcf-stift:hover {
+  transform: translateY(-1px);
+}
+.gcf-stift-zahl {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  padding: 0 5px;
+  border: 2px solid var(--gcf-primaer-text);
+  border-radius: 999px;
+  background: var(--gcf-gefahr);
+  color: #fff;
+  font: 700 11px/16px var(--gcf-schrift);
+  text-align: center;
+}
+@media (max-width: 767px) {
+  .gcf-stift-ecke {
+    left: 12px;
+    bottom: 12px;
+  }
+  .gcf-stift {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 /* ── Gemeinsame Knöpfe ───────────────────────────────────────────────────── */
 .gcf-knopf {
   display: inline-flex;
@@ -152,13 +207,29 @@
 .gcf-ki-knopf:hover {
   transform: translateY(-1px);
 }
-/* Auf dem Handy über der Anmerkungs-Leiste, nicht auf ihr. */
+/* Auf dem Handy über der Anmerkungs-Leiste, nicht auf ihr. Ist die Leiste
+   nur noch der Stift unten links, ist unten rechts wieder frei. */
 @media (max-width: 767px) {
   .gcf-ki-knopf {
     bottom: 84px;
     right: 12px;
     padding: 9px 13px;
   }
+  html[data-gcf-leiste="zu"] .gcf-ki-knopf {
+    bottom: 12px;
+  }
+  /* Während einer Führung schrumpft das Fenster, damit die markierte Stelle
+     darüber sichtbar bleibt (fuehrung.tsx rechnet mit dem freien Rest). */
+  .gcf-ki-fenster[data-fuehrung] {
+    height: min(40dvh, 340px);
+  }
+}
+.gcf-ki-einklappen {
+  width: auto;
+  gap: 4px;
+  padding: 0 8px;
+  font: 500 12px/1 var(--gcf-schrift);
+  color: var(--gcf-leise);
 }
 
 .gcf-ki-fenster {

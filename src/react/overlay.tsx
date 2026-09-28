@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import {
   OVERLAY_ATTR,
@@ -30,6 +30,7 @@ import {
 } from "../core/typen.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
+import { Runter, Stift } from "./icons.tsx";
 
 /**
  * Das Anmerkungs-Overlay: irgendwohin klicken → Kommentar, oder einkreisen.
@@ -105,6 +106,7 @@ export function AnmerkungsOverlay({ projekt }: { projekt: string }) {
 
 function Overlay({ projekt }: { projekt: string }) {
   const pfad = normPfad(usePathname());
+  const router = useRouter();
 
   /** Alle Anmerkungen des Projekts; die Seite zeigt ihre, der Export alle. */
   const [alle, setAlle] = useState<Anmerkung[]>([]);
@@ -119,6 +121,8 @@ function Overlay({ projekt }: { projekt: string }) {
   const [listeAuf, setListeAuf] = useState(false);
   const [meldung, setMeldung] = useState<string | null>(null);
   const [laeuft, setLaeuft] = useState(false);
+  /** Eine Anmerkung auf einer ANDEREN Seite, zu der die Liste gerade springt. */
+  const [sprung, setSprung] = useState<Anmerkung | null>(null);
 
   // Freihand: der Zug, der gerade entsteht (Viewport-Koordinaten).
   const zugRef = useRef<Punkt[]>([]);
@@ -276,6 +280,20 @@ function Overlay({ projekt }: { projekt: string }) {
     return () => window.removeEventListener("keydown", beiTaste);
   }, [entwurf, offen, listeAuf, modus]);
 
+  // ── Sprung auf eine andere Seite ─────────────────────────────────────────
+  // Das Overlay hängt im Layout und überlebt den Seitenwechsel. Erst wenn die
+  // neue Seite steht, wird geöffnet und hingescrollt — vorher gibt es den
+  // Anker noch nicht.
+  useEffect(() => {
+    if (!sprung || normPfad(sprung.path) !== pfad) return;
+    const id = window.setTimeout(() => {
+      setOffen(sprung.id);
+      findeAnker(sprung.anchor_selector)?.scrollIntoView({ block: "center", behavior: "smooth" });
+      setSprung(null);
+    }, 150);
+    return () => window.clearTimeout(id);
+  }, [sprung, pfad]);
+
   // ── Anlegen ──────────────────────────────────────────────────────────────
 
   /** Anker und beide Koordinatensätze für einen Zug in Viewport-Punkten. */
@@ -404,7 +422,7 @@ function Overlay({ projekt }: { projekt: string }) {
     const text = alsMarkdown(alle, `Anmerkungen ${projekt}`);
     try {
       await navigator.clipboard.writeText(text);
-      setMeldung(`${alle.length} Anmerkungen als Markdown kopiert.`);
+      setMeldung(`${alle.length} Anmerkungen als Text kopiert — jetzt einfügen.`);
     } catch {
       // Ohne Zwischenablage-Recht: als Datei. Ein Export, der still nichts
       // tut, ist schlimmer als einer, der einen Download auslöst.
@@ -633,19 +651,27 @@ function Overlay({ projekt }: { projekt: string }) {
         offeneAnzahl={offeneAnzahl}
         listeAuf={listeAuf}
         setListeAuf={setListeAuf}
-        onExport={() => void exportieren()}
       />
 
       {listeAuf && (
         <SeitenListe
-          notizen={notizen}
+          alle={alle}
+          pfad={pfad}
+          zeigeErledigte={zeigeErledigte}
           nummerVon={nummerVon}
           onSchliessen={() => setListeAuf(false)}
           onSpringen={(n) => {
+            if (normPfad(n.path) !== pfad) {
+              setOffen(null);
+              setSprung(n);
+              router.push(n.path);
+              return;
+            }
             setOffen(n.id);
             findeAnker(n.anchor_selector)?.scrollIntoView({ block: "center", behavior: "smooth" });
           }}
           onAbhaken={(n) => void mitMeldung(feedbackApi.erledigt(n.id, !n.done))}
+          onKopieren={() => void exportieren()}
         />
       )}
 
@@ -708,17 +734,51 @@ function Leiste(props: {
   offeneAnzahl: number;
   listeAuf: boolean;
   setListeAuf: (b: boolean) => void;
-  onExport: () => void;
 }) {
   // Gemerkt, weil die Leiste im Alltag stört und im Termin gebraucht wird —
   // beides soll man einmal einstellen, nicht auf jeder Seite.
   const [eingeklappt, setEingeklappt] = useLocalStorageState("gcf-leiste-eingeklappt", false);
+
+  // Die KI-Hilfe rückt auf dem Handy nach unten, sobald die Leiste nur noch
+  // ein Stift ist (styles.css). Ein Attribut statt geteiltem State: Die beiden
+  // Teile des Werkzeugs sind getrennt eingebunden.
+  useEffect(() => {
+    const html = document.documentElement;
+    html.dataset.gcfLeiste = eingeklappt ? "zu" : "auf";
+    return () => {
+      delete html.dataset.gcfLeiste;
+    };
+  }, [eingeklappt]);
 
   const modi: { wert: Modus; label: string; hinweis: string }[] = [
     { wert: "ansehen", label: "Ansehen", hinweis: "Seite normal bedienen" },
     { wert: "kommentar", label: "Kommentieren", hinweis: "Irgendwohin klicken und schreiben" },
     { wert: "zeichnen", label: "Einkreisen", hinweis: "Mit gedrückter Maus einen Bereich einkreisen" },
   ];
+
+  // Eingeklappt nur der Stift, unten links: Auf dem Handy verdeckt eine
+  // Leiste in der Mitte genau die Stelle, die man gerade prüfen will.
+  if (eingeklappt) {
+    return (
+      <aside {...{ [OVERLAY_ATTR]: "" }} aria-label="Anmerkungen" className="gcf-stift-ecke">
+        <button
+          type="button"
+          className="gcf-stift"
+          onClick={() => setEingeklappt(false)}
+          aria-expanded={false}
+          aria-label={`Anmerkungen öffnen, ${props.offeneAnzahl} offen auf dieser Seite`}
+          title="Anmerkungen öffnen"
+        >
+          <Stift size={20} />
+          {props.offeneAnzahl > 0 && (
+            <span aria-hidden className="gcf-stift-zahl">
+              {props.offeneAnzahl > 99 ? "99+" : props.offeneAnzahl}
+            </span>
+          )}
+        </button>
+      </aside>
+    );
+  }
 
   // ⚠️ Landmark AUSSEN, Werkzeugleiste INNEN (Katalognote, Entscheidung 4).
   return (
@@ -752,128 +812,119 @@ function Leiste(props: {
           boxShadow: "0 6px 24px rgba(0,0,0,.18)",
         }}
       >
-        {eingeklappt ? (
-          <button type="button" style={knopfStil} onClick={() => setEingeklappt(false)}>
-            ✎ Anmerkungen · {props.offeneAnzahl} offen
-          </button>
-        ) : (
-          <>
-            <div role="radiogroup" aria-label="Werkzeug" style={{ display: "flex", gap: 4 }}>
-              {modi.map((m) => (
-                <button
-                  key={m.wert}
-                  type="button"
-                  role="radio"
-                  aria-checked={props.modus === m.wert}
-                  title={m.hinweis}
-                  onClick={() => props.setModus(m.wert)}
-                  style={{
-                    ...knopfStil,
-                    background: props.modus === m.wert ? T.primaer : T.flaeche,
-                    color: props.modus === m.wert ? T.primaerText : T.text,
-                    fontWeight: props.modus === m.wert ? 600 : 500,
-                  }}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            <div
-              role="radiogroup"
-              aria-label="Farbe"
-              style={{ display: "flex", gap: 3, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}
-            >
-              {KUNDEN_FARBEN.map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  role="radio"
-                  aria-checked={props.farbe === f}
-                  aria-label={FARBNAME[f]}
-                  title={f === "rot" ? "Rot: muss geändert werden" : "Grün: alles andere"}
-                  onClick={() => props.setFarbe(f)}
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: "50%",
-                    background: FARBWERT[f],
-                    border: props.farbe === f ? `3px solid ${T.text}` : `1px solid ${T.kante}`,
-                    cursor: "pointer",
-                  }}
-                />
-              ))}
-            </div>
-
-            <div style={{ display: "flex", gap: 4, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}>
-              {(
-                [
-                  ["Punkte", props.zeigePins, props.setZeigePins],
-                  ["Kreise", props.zeigeStriche, props.setZeigeStriche],
-                ] as const
-              ).map(([label, an, setzen]) => (
-                <button
-                  key={label}
-                  type="button"
-                  aria-pressed={an}
-                  title={an ? `${label} ausblenden` : `${label} einblenden`}
-                  onClick={() => setzen(!an)}
-                  style={{
-                    ...knopfStil,
-                    opacity: an ? 1 : 0.6,
-                    textDecoration: an ? "none" : "line-through",
-                    borderStyle: an ? "solid" : "dashed",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
+        <div role="radiogroup" aria-label="Werkzeug" style={{ display: "flex", gap: 4 }}>
+          {modi.map((m) => (
             <button
+              key={m.wert}
               type="button"
-              style={knopfStil}
-              aria-pressed={props.listeAuf}
-              onClick={() => props.setListeAuf(!props.listeAuf)}
-            >
-              Liste · {props.offeneAnzahl} offen
-            </button>
-
-            <label
+              role="radio"
+              aria-checked={props.modus === m.wert}
+              title={m.hinweis}
+              onClick={() => props.setModus(m.wert)}
               style={{
-                font: `500 12px/1 ${T.schrift}`,
-                color: T.leise,
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
+                ...knopfStil,
+                background: props.modus === m.wert ? T.primaer : T.flaeche,
+                color: props.modus === m.wert ? T.primaerText : T.text,
+                fontWeight: props.modus === m.wert ? 600 : 500,
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        <div
+          role="radiogroup"
+          aria-label="Farbe"
+          style={{ display: "flex", gap: 3, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}
+        >
+          {KUNDEN_FARBEN.map((f) => (
+            <button
+              key={f}
+              type="button"
+              role="radio"
+              aria-checked={props.farbe === f}
+              aria-label={FARBNAME[f]}
+              title={f === "rot" ? "Rot: muss geändert werden" : "Grün: alles andere"}
+              onClick={() => props.setFarbe(f)}
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                background: FARBWERT[f],
+                border: props.farbe === f ? `3px solid ${T.text}` : `1px solid ${T.kante}`,
                 cursor: "pointer",
               }}
-            >
-              <input
-                type="checkbox"
-                checked={props.zeigeErledigte}
-                onChange={(e) => props.setZeigeErledigte(e.target.checked)}
-              />
-              Erledigte
-            </label>
+            />
+          ))}
+        </div>
 
-            <button type="button" style={knopfStil} onClick={props.onExport} title="Alle Seiten als Markdown">
-              Export
-            </button>
-
+        <div style={{ display: "flex", gap: 4, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}>
+          {(
+            [
+              ["Punkte", props.zeigePins, props.setZeigePins],
+              ["Kreise", props.zeigeStriche, props.setZeigeStriche],
+            ] as const
+          ).map(([label, an, setzen]) => (
             <button
+              key={label}
               type="button"
-              style={{ ...knopfStil, border: "none", background: "transparent", padding: 6 }}
-              onClick={() => {
-                props.setModus("ansehen");
-                setEingeklappt(true);
+              aria-pressed={an}
+              title={an ? `${label} ausblenden` : `${label} einblenden`}
+              onClick={() => setzen(!an)}
+              style={{
+                ...knopfStil,
+                opacity: an ? 1 : 0.6,
+                textDecoration: an ? "none" : "line-through",
+                borderStyle: an ? "solid" : "dashed",
               }}
-              aria-label="Leiste einklappen"
             >
-              ✕
+              {label}
             </button>
-          </>
-        )}
+          ))}
+        </div>
+
+        <button
+          type="button"
+          style={knopfStil}
+          aria-pressed={props.listeAuf}
+          onClick={() => props.setListeAuf(!props.listeAuf)}
+        >
+          Liste · {props.offeneAnzahl} offen
+        </button>
+
+        <label
+          style={{
+            font: `500 12px/1 ${T.schrift}`,
+            color: T.leise,
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={props.zeigeErledigte}
+            onChange={(e) => props.setZeigeErledigte(e.target.checked)}
+          />
+          Erledigte
+        </label>
+
+        <button
+          type="button"
+          style={{ ...knopfStil, display: "inline-flex", alignItems: "center", gap: 4 }}
+          onClick={() => {
+            props.setModus("ansehen");
+            props.setListeAuf(false);
+            setEingeklappt(true);
+          }}
+          aria-expanded
+          title="Leiste einklappen — der Stift unten links holt sie zurück"
+        >
+          <Runter size={14} />
+          Einklappen
+        </button>
       </div>
     </aside>
   );
@@ -1190,113 +1241,190 @@ function NotizFenster(props: {
   );
 }
 
-/** Alle Anmerkungen dieser Seite auf einen Blick. */
+/**
+ * Die Liste: diese Seite oder alle Seiten. „Alle Seiten" ist der Weg zu
+ * Anmerkungen, die man auf der aktuellen Seite nicht sieht — ein Klick
+ * wechselt die Seite und öffnet die Anmerkung dort.
+ */
 function SeitenListe(props: {
-  notizen: Anmerkung[];
+  alle: Anmerkung[];
+  pfad: string;
+  zeigeErledigte: boolean;
   nummerVon: (n: Anmerkung) => number;
   onSchliessen: () => void;
   onSpringen: (n: Anmerkung) => void;
   onAbhaken: (n: Anmerkung) => void;
+  onKopieren: () => void;
 }) {
+  const [bereich, setBereich] = useLocalStorageState<"seite" | "alle">("gcf-liste-bereich", "seite");
+  const sichtbar = props.alle.filter((n) => props.zeigeErledigte || !n.done);
+  const hier = sichtbar.filter((n) => normPfad(n.path) === props.pfad);
+  const offenAlle = props.alle.filter((n) => !n.done).length;
+
+  // Gruppiert nach Seite, die aktuelle zuerst.
+  const seiten = [...new Set(sichtbar.map((n) => normPfad(n.path)))].sort((a, b) =>
+    a === props.pfad ? -1 : b === props.pfad ? 1 : a.localeCompare(b),
+  );
+  const gruppen: [string, Anmerkung[]][] =
+    bereich === "seite"
+      ? [[props.pfad, hier]]
+      : seiten.map((s) => [s, sichtbar.filter((n) => normPfad(n.path) === s)]);
+
+  const reiter = (wert: "seite" | "alle", label: string) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={bereich === wert}
+      onClick={() => setBereich(wert)}
+      style={{
+        ...knopfStil,
+        flex: 1,
+        background: bereich === wert ? T.primaer : T.flaeche,
+        color: bereich === wert ? T.primaerText : T.text,
+        fontWeight: bereich === wert ? 600 : 500,
+      }}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <aside
       {...{ [OVERLAY_ATTR]: "" }}
-      aria-label="Anmerkungen dieser Seite"
+      aria-label="Liste der Anmerkungen"
       style={{
+        // Links: Rechts liegt die KI-Hilfe, beide sollen gleichzeitig offen sein können.
         position: "fixed",
-        right: 16,
+        left: 16,
         top: 16,
         bottom: 78,
         width: "min(340px, calc(100vw - 32px))",
         zIndex: EBENE + 2,
+        display: "flex",
+        flexDirection: "column",
         background: T.leiste,
         color: T.text,
         border: `1px solid ${T.kante}`,
         borderRadius: 12,
-        padding: 12,
-        overflowY: "auto",
         boxShadow: "0 8px 30px rgba(0,0,0,.18)",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ font: `600 13px/1.3 ${T.schrift}`, margin: 0 }}>Diese Seite · {props.notizen.length}</h2>
-        <button
-          type="button"
-          onClick={props.onSchliessen}
-          aria-label="Liste schließen"
-          style={{ ...knopfStil, border: "none", background: "transparent", padding: 2 }}
-        >
-          ✕
-        </button>
+      <div style={{ padding: "12px 12px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ font: `600 13px/1.3 ${T.schrift}`, margin: 0 }}>Anmerkungen</h2>
+          <button
+            type="button"
+            onClick={props.onSchliessen}
+            aria-label="Liste schließen"
+            style={{ ...knopfStil, border: "none", background: "transparent", padding: 2 }}
+          >
+            ✕
+          </button>
+        </div>
+        <div role="tablist" aria-label="Welche Anmerkungen" style={{ display: "flex", gap: 4, marginTop: 8 }}>
+          {reiter("seite", `Diese Seite · ${hier.length}`)}
+          {reiter("alle", `Alle Seiten · ${sichtbar.length}`)}
+        </div>
       </div>
 
-      {props.notizen.length === 0 && (
-        <p style={{ font: `400 13px/1.5 ${T.schrift}`, color: T.leise, marginTop: 10 }}>
-          Noch nichts angemerkt. &bdquo;Kommentieren&ldquo; wählen und irgendwohin klicken.
-        </p>
-      )}
+      <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+        {(bereich === "seite" ? hier.length : sichtbar.length) === 0 && (
+          <p style={{ font: `400 13px/1.5 ${T.schrift}`, color: T.leise, margin: 0 }}>
+            {bereich === "seite"
+              ? "Auf dieser Seite noch nichts angemerkt. „Kommentieren“ wählen und irgendwohin klicken."
+              : "Noch nichts angemerkt."}
+          </p>
+        )}
 
-      <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0, display: "grid", gap: 6 }}>
-        {props.notizen.map((n) => {
-          const gefunden = Boolean(findeAnker(n.anchor_selector)) || n.fallback.length > 0;
-          return (
-            <li
-              key={n.id}
-              style={{
-                background: T.flaeche,
-                border: `1px solid ${T.kante}`,
-                borderLeft: `3px solid ${FARBWERT[n.color]}`,
-                borderRadius: 6,
-                padding: 8,
-                opacity: n.done ? 0.6 : 1,
-              }}
-            >
-              <p style={{ ...kleinStil, fontWeight: 600, marginBottom: 2 }}>{wer(n)}</p>
-              <button
-                type="button"
-                onClick={() => props.onSpringen(n)}
-                style={{
-                  font: `400 13px/1.45 ${T.schrift}`,
-                  color: T.text,
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  textAlign: "left",
-                  cursor: "pointer",
-                  textDecoration: n.done ? "line-through" : "none",
-                }}
-              >
-                <strong style={{ color: T.leise, fontWeight: 600 }}>
-                  {n.shape === "pin" ? `${props.nummerVon(n) || "–"}. ` : "✎ "}
-                </strong>
-                {n.body ?? <em style={{ color: T.leise }}>nur eingekreist</em>}
-              </button>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
-                <span style={kleinStil}>
-                  {n.anchor_label}
-                  {gefunden ? "" : " · Stelle nicht gefunden"}
-                  {n.replies.length > 0 ? ` · ${n.replies.length} Antwort${n.replies.length === 1 ? "" : "en"}` : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => props.onAbhaken(n)}
-                  style={{
-                    ...kleinStil,
-                    fontWeight: 600,
-                    color: n.done ? T.leise : T.primaer,
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                  }}
-                >
-                  {n.done ? "wieder öffnen" : "erledigt"}
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+        {gruppen.map(([seite, liste]) =>
+          liste.length === 0 ? null : (
+            <section key={seite} style={{ marginBottom: 12 }}>
+              {bereich === "alle" && (
+                <h3 style={{ ...kleinStil, fontWeight: 600, margin: "0 0 6px" }}>
+                  {seite === props.pfad ? `${seite} (hier)` : seite}
+                </h3>
+              )}
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 6 }}>
+                {liste.map((n) => {
+                  const hierSeite = normPfad(n.path) === props.pfad;
+                  const gefunden = !hierSeite || Boolean(findeAnker(n.anchor_selector)) || n.fallback.length > 0;
+                  const nr = hierSeite ? props.nummerVon(n) : 0;
+                  return (
+                    <li
+                      key={n.id}
+                      style={{
+                        background: T.flaeche,
+                        border: `1px solid ${T.kante}`,
+                        borderLeft: `3px solid ${FARBWERT[n.color]}`,
+                        borderRadius: 6,
+                        padding: 8,
+                        opacity: n.done ? 0.6 : 1,
+                      }}
+                    >
+                      <p style={{ ...kleinStil, fontWeight: 600, marginBottom: 2 }}>{wer(n)}</p>
+                      <button
+                        type="button"
+                        onClick={() => props.onSpringen(n)}
+                        style={{
+                          font: `400 13px/1.45 ${T.schrift}`,
+                          color: T.text,
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          textAlign: "left",
+                          cursor: "pointer",
+                          textDecoration: n.done ? "line-through" : "none",
+                        }}
+                      >
+                        <strong style={{ color: T.leise, fontWeight: 600 }}>
+                          {n.shape === "pin" ? `${nr || "•"} ` : "✎ "}
+                        </strong>
+                        {n.body ?? <em style={{ color: T.leise }}>nur eingekreist</em>}
+                      </button>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
+                        <span style={kleinStil}>
+                          {n.anchor_label}
+                          {hierSeite ? "" : " · andere Seite, Klick wechselt dorthin"}
+                          {gefunden ? "" : " · Stelle nicht gefunden"}
+                          {n.replies.length > 0
+                            ? ` · ${n.replies.length} Antwort${n.replies.length === 1 ? "" : "en"}`
+                            : ""}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => props.onAbhaken(n)}
+                          style={{
+                            ...kleinStil,
+                            fontWeight: 600,
+                            color: n.done ? T.leise : T.primaer,
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          {n.done ? "wieder öffnen" : "erledigt"}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ),
+        )}
+      </div>
+
+      {/* Früher „Export" in der Leiste — niemand wusste, was er tut. Jetzt
+          steht es dran, und es steht dort, wo man die Liste schon vor sich hat. */}
+      <div style={{ borderTop: `1px solid ${T.kante}`, padding: "10px 12px" }}>
+        <button type="button" onClick={props.onKopieren} style={{ ...knopfStil, width: "100%" }}>
+          Alle {props.alle.length} als Text kopieren
+        </button>
+        <p style={{ ...kleinStil, marginTop: 6 }}>
+          Für eine E-Mail oder ein Dokument: alle Seiten, mit Antworten, {offenAlle} davon offen.
+        </p>
+      </div>
     </aside>
   );
 }

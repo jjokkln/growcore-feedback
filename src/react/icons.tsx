@@ -45,3 +45,20 @@ export const Start = ({ size }: P) => (
     <path d="M7 5l12 7-12 7z" />
   </svg>
 );
+export const Stift = ({ size }: P) => (
+  <svg {...basis(size)}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
+  </svg>
+);
+/** Einklappen: Die Spitze zeigt, wohin das Fenster geht. */
+export const Runter = ({ size }: P) => (
+  <svg {...basis(size)}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+export const Hoch = ({ size }: P) => (
+  <svg {...basis(size)}>
+    <path d="M18 15l-6-6-6 6" />
+  </svg>
+);

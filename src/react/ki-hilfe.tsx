@@ -9,7 +9,7 @@ import type { KiNachricht } from "../core/typen.ts";
 import type { ZielKatalog } from "../core/ziele.ts";
 import { Fuehrung, starteFuehrung } from "./fuehrung.tsx";
 import { useMounted } from "./hooks.ts";
-import { Fadenkreuz, Funken, Info, Kreuz, Pfeil, Start } from "./icons.tsx";
+import { Fadenkreuz, Funken, Hoch, Info, Pfeil, Runter, Start } from "./icons.tsx";
 import { KI_UI_ATTR } from "./ziel-finden.ts";
 
 /**
@@ -58,6 +58,7 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
   const [eingabe, setEingabe] = useState("");
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
+  const [fuehrt, setFuehrt] = useState(false);
 
   const knopfRef = useRef<HTMLButtonElement>(null);
   const feldRef = useRef<HTMLTextAreaElement>(null);
@@ -141,14 +142,15 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
     }
   };
 
+  // Das Fenster bleibt offen: Wer „Zeigen" drückt, will danach weiterlesen
+  // oder nachfragen. Auf dem Handy schrumpft es während der Führung (CSS).
   const fuehren = (schritte: Schritt[], ab: number) => {
-    setOffen(false);
     starteFuehrung(schritte, ab);
   };
 
   return (
     <>
-      <Fuehrung ziele={ziele} onZurKiHilfe={() => setOffen(true)} />
+      <Fuehrung ziele={ziele} onZurKiHilfe={() => setOffen(true)} onLaeuft={setFuehrt} />
       {!offen && (
         <button
           ref={knopfRef}
@@ -161,6 +163,7 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
         >
           <Funken />
           KI-Hilfe
+          <Hoch size={14} />
         </button>
       )}
 
@@ -171,6 +174,7 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
           role="dialog"
           aria-labelledby="gcf-ki-titel"
           className="gcf-ki-fenster"
+          {...(fuehrt ? { "data-fuehrung": "" } : {})}
         >
           <div className="gcf-ki-kopf">
             <span className="gcf-ki-zeichen">
@@ -182,16 +186,20 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
               </h2>
               <p className="gcf-klein">Antworten erzeugt eine KI (Google Gemini, EU). Sie kann sich irren.</p>
             </div>
+            {/* Einklappen, nicht Schließen: Das Gespräch bleibt, der Knopf holt es zurück. */}
             <button
               type="button"
-              className="gcf-icon-knopf"
-              aria-label="KI-Hilfe schließen"
+              className="gcf-icon-knopf gcf-ki-einklappen"
+              aria-expanded
+              aria-controls="gcf-ki-fenster"
+              title="KI-Hilfe einklappen — das Gespräch bleibt erhalten"
               onClick={() => {
                 setOffen(false);
                 knopfRef.current?.focus();
               }}
             >
-              <Kreuz />
+              <Runter size={16} />
+              Einklappen
             </button>
           </div>
 
