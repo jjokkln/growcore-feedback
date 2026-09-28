@@ -1,5 +1,6 @@
 import type { ZielKatalog } from "../core/ziele.ts";
 import { GrowcoreFeedback } from "../react/feedback.tsx";
+import { AnmerkungsKnopf } from "../react/knopf.tsx";
 
 /**
  * Server-Komponente fürs Layout. Liest die Schalter zur Laufzeit des
@@ -25,4 +26,15 @@ export function FeedbackWerkzeug(props: {
       vorschlaege={props.vorschlaege ?? []}
     />
   );
+}
+
+/**
+ * Der `?`-Knopf für die Navigation — Server-Komponente mit demselben Schalter
+ * wie `FeedbackWerkzeug`. Ohne `FEEDBACK=1` steht er nicht in der Seite.
+ *
+ *   <FeedbackKnopf className="…Icon-Knopf der Navigation…" />
+ */
+export function FeedbackKnopf(props: { className?: string }) {
+  if (process.env.FEEDBACK !== "1") return null;
+  return <AnmerkungsKnopf className={props.className} />;
 }

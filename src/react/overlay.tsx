@@ -29,8 +29,9 @@ import {
   type Punkt,
 } from "../core/typen.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
+import { offeneMelden, useEinstieg, useLeisteOffen } from "./einstieg.ts";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
-import { Runter, Stift } from "./icons.tsx";
+import { Haken, Runter, Stift } from "./icons.tsx";
 
 /**
  * Das Anmerkungs-Overlay: irgendwohin klicken → Kommentar, oder einkreisen.
@@ -111,14 +112,32 @@ function Overlay({ projekt }: { projekt: string }) {
   /** Alle Anmerkungen des Projekts; die Seite zeigt ihre, der Export alle. */
   const [alle, setAlle] = useState<Anmerkung[]>([]);
   const notizen = alle.filter((n) => normPfad(n.path) === pfad);
-  const [modus, setModus] = useState<Modus>("ansehen");
+  const [modusRoh, setModus] = useState<Modus>("ansehen");
   const [farbe, setFarbe] = useState<KundenFarbe>("rot");
   const [zeigeErledigte, setZeigeErledigte] = useState(false);
-  const [zeigePins, setZeigePins] = useState(true);
-  const [zeigeStriche, setZeigeStriche] = useState(true);
-  const [entwurf, setEntwurf] = useState<Entwurf | null>(null);
+  const [entwurfRoh, setEntwurf] = useState<Entwurf | null>(null);
   const [offen, setOffen] = useState<string | null>(null);
-  const [listeAuf, setListeAuf] = useState(false);
+  const [listeAufRoh, setListeAuf] = useState(false);
+
+  // Ist die Leiste zu (über das `?` in der Navigation), gilt „Ansehen" — ohne
+  // Liste, ohne halbfertigen Entwurf. Abgeleitet statt zurückgesetzt: Der
+  // Knopf sitzt außerhalb dieses Baums und kennt diesen State nicht.
+  const [leisteOffen, setLeisteOffen] = useLeisteOffen();
+  const modus: Modus = leisteOffen ? modusRoh : "ansehen";
+  const entwurf = leisteOffen ? entwurfRoh : null;
+  const listeAuf = leisteOffen && listeAufRoh;
+  // Beim Schließen auch den Rohstand zurücksetzen, damit die Leiste beim
+  // nächsten Öffnen wieder mit „Ansehen" beginnt. Während des Renderns statt
+  // im Effekt (React: „Adjusting state when a prop changes").
+  const [warOffen, setWarOffen] = useState(leisteOffen);
+  if (warOffen !== leisteOffen) {
+    setWarOffen(leisteOffen);
+    if (!leisteOffen) {
+      setModus("ansehen");
+      setEntwurf(null);
+      setListeAuf(false);
+    }
+  }
   const [meldung, setMeldung] = useState<string | null>(null);
   const [laeuft, setLaeuft] = useState(false);
   /** Eine Anmerkung auf einer ANDEREN Seite, zu der die Liste gerade springt. */
@@ -142,6 +161,12 @@ function Overlay({ projekt }: { projekt: string }) {
 
   const sichtbare = notizen.filter((n) => zeigeErledigte || !n.done);
   const offeneAnzahl = notizen.filter((n) => !n.done).length;
+
+  // Der `?`-Knopf in der Navigation zeigt die Zahl (einstieg.ts).
+  useEffect(() => {
+    offeneMelden(offeneAnzahl);
+  }, [offeneAnzahl]);
+  useEffect(() => () => offeneMelden(0), []);
 
   // ── Laden ────────────────────────────────────────────────────────────────
   const neuLaden = useCallback(async () => {
@@ -327,8 +352,21 @@ function Overlay({ projekt }: { projekt: string }) {
     return true;
   };
 
+  /**
+   * Im Kommentar- und Zeichenmodus liegt die Fläche über der ganzen Seite,
+   * auch über dem `?` in der Navigation. Ein Klick darauf soll die Leiste
+   * schließen und keine Anmerkung setzen.
+   */
+  const trifftKnopf = (x: number, y: number) =>
+    document.elementsFromPoint(x, y).some((el) => el.closest(".gcf-frage"));
+
   const beiKlick = (e: React.MouseEvent) => {
-    if (modus !== "kommentar" || entwurf) return;
+    if (modus !== "kommentar") return;
+    if (trifftKnopf(e.clientX, e.clientY)) {
+      setLeisteOffen(false);
+      return;
+    }
+    if (entwurf) return;
     const getroffen = elementUnter(e.clientX, e.clientY);
     const anker = sektionsWurzel(getroffen);
     setEntwurf({
@@ -378,6 +416,10 @@ function Overlay({ projekt }: { projekt: string }) {
   // ── Freihand ─────────────────────────────────────────────────────────────
   const beiZeigerAb = (e: React.PointerEvent) => {
     if (modus !== "zeichnen") return;
+    if (trifftKnopf(e.clientX, e.clientY)) {
+      setLeisteOffen(false);
+      return;
+    }
     (e.target as Element).setPointerCapture?.(e.pointerId);
     zugRef.current = [{ x: e.clientX, y: e.clientY }];
     setZeichnetGerade(true);
@@ -437,8 +479,8 @@ function Overlay({ projekt }: { projekt: string }) {
   };
 
   // ── Darstellung ──────────────────────────────────────────────────────────
-  const pins = zeigePins ? sichtbare.filter((n) => n.shape === "pin") : [];
-  const striche = zeigeStriche ? sichtbare.filter((n) => n.shape === "stroke") : [];
+  const pins = sichtbare.filter((n) => n.shape === "pin");
+  const striche = sichtbare.filter((n) => n.shape === "stroke");
   const offeneNotiz = notizen.find((n) => n.id === offen) ?? null;
   const nummerVon = (n: Anmerkung) => pins.findIndex((p) => p.id === n.id) + 1;
 
@@ -644,10 +686,6 @@ function Overlay({ projekt }: { projekt: string }) {
         setFarbe={setFarbe}
         zeigeErledigte={zeigeErledigte}
         setZeigeErledigte={setZeigeErledigte}
-        zeigePins={zeigePins}
-        setZeigePins={setZeigePins}
-        zeigeStriche={zeigeStriche}
-        setZeigeStriche={setZeigeStriche}
         offeneAnzahl={offeneAnzahl}
         listeAuf={listeAuf}
         setListeAuf={setListeAuf}
@@ -727,17 +765,16 @@ function Leiste(props: {
   setFarbe: (f: KundenFarbe) => void;
   zeigeErledigte: boolean;
   setZeigeErledigte: (b: boolean) => void;
-  zeigePins: boolean;
-  setZeigePins: (b: boolean) => void;
-  zeigeStriche: boolean;
-  setZeigeStriche: (b: boolean) => void;
   offeneAnzahl: number;
   listeAuf: boolean;
   setListeAuf: (b: boolean) => void;
 }) {
   // Gemerkt, weil die Leiste im Alltag stört und im Termin gebraucht wird —
-  // beides soll man einmal einstellen, nicht auf jeder Seite.
-  const [eingeklappt, setEingeklappt] = useLocalStorageState("gcf-leiste-eingeklappt", false);
+  // beides soll man einmal einstellen, nicht auf jeder Seite. Standard: zu.
+  // Der Einstieg ist der `?`-Knopf in der Navigation (knopf.tsx).
+  const [offen, setOffen] = useLeisteOffen();
+  const eingeklappt = !offen;
+  const { knoepfe } = useEinstieg();
 
   // Die KI-Hilfe rückt auf dem Handy nach unten, sobald die Leiste nur noch
   // ein Stift ist (styles.css). Ein Attribut statt geteiltem State: Die beiden
@@ -756,15 +793,20 @@ function Leiste(props: {
     { wert: "zeichnen", label: "Einkreisen", hinweis: "Mit gedrückter Maus einen Bereich einkreisen" },
   ];
 
-  // Eingeklappt nur der Stift, unten links: Auf dem Handy verdeckt eine
-  // Leiste in der Mitte genau die Stelle, die man gerade prüfen will.
+  // Eingeklappt mit `?`-Knopf in der Navigation: nichts. Nichts schwebt über
+  // der Seite, solange niemand anmerken will.
+  if (eingeklappt && knoepfe > 0) return null;
+
+  // Eingeklappt ohne Knopf: der Stift unten links als Notnagel — sonst gäbe
+  // es keinen Weg hinein. Auf dem Handy verdeckt eine Leiste in der Mitte
+  // genau die Stelle, die man gerade prüfen will.
   if (eingeklappt) {
     return (
       <aside {...{ [OVERLAY_ATTR]: "" }} aria-label="Anmerkungen" className="gcf-stift-ecke">
         <button
           type="button"
           className="gcf-stift"
-          onClick={() => setEingeklappt(false)}
+          onClick={() => setOffen(true)}
           aria-expanded={false}
           aria-label={`Anmerkungen öffnen, ${props.offeneAnzahl} offen auf dieser Seite`}
           title="Anmerkungen öffnen"
@@ -860,71 +902,48 @@ function Leiste(props: {
         </div>
 
         <div style={{ display: "flex", gap: 4, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}>
-          {(
-            [
-              ["Punkte", props.zeigePins, props.setZeigePins],
-              ["Kreise", props.zeigeStriche, props.setZeigeStriche],
-            ] as const
-          ).map(([label, an, setzen]) => (
-            <button
-              key={label}
-              type="button"
-              aria-pressed={an}
-              title={an ? `${label} ausblenden` : `${label} einblenden`}
-              onClick={() => setzen(!an)}
-              style={{
-                ...knopfStil,
-                opacity: an ? 1 : 0.6,
-                textDecoration: an ? "none" : "line-through",
-                borderStyle: an ? "solid" : "dashed",
-              }}
-            >
-              {label}
-            </button>
-          ))}
+          <button
+            type="button"
+            style={knopfStil}
+            aria-pressed={props.listeAuf}
+            onClick={() => props.setListeAuf(!props.listeAuf)}
+          >
+            Liste · {props.offeneAnzahl} offen
+          </button>
+
+          {/* Ein echtes Kästchen, nur neu gezeichnet: Tastatur, Leertaste und
+              Screenreader kommen vom Browser (styles.css, `.gcf-haken`). */}
+          <label className="gcf-haken" style={{ ...knopfStil, color: props.zeigeErledigte ? T.text : T.leise }}>
+            <input
+              type="checkbox"
+              checked={props.zeigeErledigte}
+              onChange={(e) => props.setZeigeErledigte(e.target.checked)}
+            />
+            <span aria-hidden className="gcf-haken-kasten">
+              <Haken size={11} />
+            </span>
+            Erledigte
+          </label>
         </div>
 
-        <button
-          type="button"
-          style={knopfStil}
-          aria-pressed={props.listeAuf}
-          onClick={() => props.setListeAuf(!props.listeAuf)}
-        >
-          Liste · {props.offeneAnzahl} offen
-        </button>
-
-        <label
-          style={{
-            font: `500 12px/1 ${T.schrift}`,
-            color: T.leise,
-            display: "flex",
-            alignItems: "center",
-            gap: 5,
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={props.zeigeErledigte}
-            onChange={(e) => props.setZeigeErledigte(e.target.checked)}
-          />
-          Erledigte
-        </label>
-
-        <button
-          type="button"
-          style={{ ...knopfStil, display: "inline-flex", alignItems: "center", gap: 4 }}
-          onClick={() => {
-            props.setModus("ansehen");
-            props.setListeAuf(false);
-            setEingeklappt(true);
-          }}
-          aria-expanded
-          title="Leiste einklappen — der Stift unten links holt sie zurück"
-        >
-          <Runter size={14} />
-          Einklappen
-        </button>
+        {/* Mit `?` in der Navigation schließt das `?` die Leiste — ein zweiter
+            Knopf dafür wäre doppelt. Ohne ihn bleibt „Einklappen" der Weg. */}
+        {knoepfe === 0 && (
+          <button
+            type="button"
+            style={{ ...knopfStil, display: "inline-flex", alignItems: "center", gap: 4 }}
+            onClick={() => {
+              props.setModus("ansehen");
+              props.setListeAuf(false);
+              setOffen(false);
+            }}
+            aria-expanded
+            title="Leiste einklappen — der Stift unten links holt sie zurück"
+          >
+            <Runter size={14} />
+            Einklappen
+          </button>
+        )}
       </div>
     </aside>
   );

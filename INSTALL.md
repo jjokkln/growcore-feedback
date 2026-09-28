@@ -24,7 +24,7 @@ Grundsatz: DECISIONS 2026-09-28a im AI-OS.
 ## 1. Installieren
 
 ```bash
-npm i "git+https://github.com/jjokkln/growcore-feedback.git#v0.2.0"
+npm i "git+https://github.com/jjokkln/growcore-feedback.git#v0.3.0"
 ```
 
 Immer auf einen **Tag** festnageln, nie auf `main`. `npm` schreibt `git+ssh://`
@@ -107,6 +107,30 @@ import { ZIELE } from "@/content/ki-wissen";
 <FeedbackWerkzeug projekt="Website von …" ziele={ZIELE} vorschlaege={["Wo finde ich …?"]} />
 ```
 
+**Der Einstieg ist ein `?` in der Navigation. Das ist der Standard (seit v0.3.0).**
+Solange niemand etwas anmerken will, schwebt nichts über der Seite. Ein Klick
+auf das `?` öffnet die Leiste, ein zweiter schließt sie wieder. Vorbild ist
+Aghasadeh-Garage.
+
+```tsx
+import { FeedbackKnopf } from "@growcore/feedback/next";
+
+// in der Kopfleiste, neben den übrigen Icon-Knöpfen:
+<FeedbackKnopf className="<Icon-Knopf-Klassen der Navigation>" />
+```
+
+- Derselbe Schalter wie `FeedbackWerkzeug`: Ohne `FEEDBACK=1` steht er nicht
+  in der Seite.
+- `className` übernimmt den Stil der Navigation. Fehlt sie, gilt
+  `.gcf-frage-standard`: 32 px, transparent, in der Textfarbe der Leiste.
+- ⚠️ **Auf jeder Breite sichtbar**, also **nicht** ins Handy-Menü, das man
+  erst aufklappen muss. Sonst gibt es auf dem Handy keinen Einstieg.
+- Ist kein Knopf eingebunden, erscheint unten links der Stift als Notbehelf,
+  dazu „Einklappen“ in der Leiste. Mit Knopf gibt es beides nicht.
+- Eine App mit eigener Rechteprüfung (z. B. nur für den Admin) nimmt
+  `AnmerkungsKnopf` aus `@growcore/feedback/react`, mit **derselben**
+  Bedingung wie das Overlay. Sonst zeigt der Knopf ins Leere.
+
 Und das CSS nach dem eigenen, z. B. in `globals.css`:
 
 ```css
@@ -153,6 +177,15 @@ Neuer Tag im Paket → in jedem Einbau `npm i "git+https://…#vX.Y.Z"`. Einbaut
 stehen in der Projektkarte `growcore-feedback` im AI-OS.
 
 ## Änderungen
+
+- **v0.3.0** (2026-09-28): Der Einstieg ist ein `?` in der Navigation
+  (`FeedbackKnopf` bzw. `AnmerkungsKnopf`), mit der Zahl offener Anmerkungen.
+  Die Leiste ist anfangs zu, nichts schwebt. Ein Klick aufs `?` schließt sie
+  in jedem Modus (auch beim Kommentieren) und setzt sie auf „Ansehen“ zurück.
+  „Punkte“ und „Kreise“ sind entfernt. „Erledigte“ hat ein eigenes Kästchen.
+  „Einklappen“ gibt es nur noch ohne Knopf. Die Leiste bricht am Schreibtisch
+  nicht mehr um. Neuer localStorage-Schlüssel `gcf-leiste-offen` (Standard:
+  zu), der alte `gcf-leiste-eingeklappt` wird nicht mehr gelesen.
 
 - **v0.2.0** (2026-09-28): Eingeklappt nur noch ein Stift unten links in der
   Projektfarbe (`--gcf-primaer`), mit Zahl der offenen Anmerkungen. KI-Fenster

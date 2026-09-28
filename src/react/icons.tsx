@@ -62,3 +62,15 @@ export const Hoch = ({ size }: P) => (
     <path d="M18 15l-6-6-6 6" />
   </svg>
 );
+/** Der Einstieg in der Navigation — dasselbe Zeichen wie in Aghasadeh-Garage. */
+export const Frage = ({ size }: P) => (
+  <svg {...basis(size)}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01" />
+  </svg>
+);
+export const Haken = ({ size }: P) => (
+  <svg {...basis(size)} strokeWidth={3}>
+    <path d="M20 6L9 17l-5-5" />
+  </svg>
+);

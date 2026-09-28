@@ -42,6 +42,9 @@
 
 /* ── Anmerkungs-Leiste ───────────────────────────────────────────────────── */
 .gcf-leiste {
+  /* `max-content`: Mit `left: 50%` hätte die Leiste sonst nur die halbe
+     Fensterbreite zum Wachsen und bräche vorzeitig um. */
+  width: max-content;
   max-width: calc(100vw - 24px);
 }
 @media (min-width: 768px) {
@@ -103,6 +106,101 @@
     width: 44px;
     height: 44px;
   }
+}
+
+/* ── Der `?`-Knopf in der Navigation (knopf.tsx) ─────────────────────────── */
+/* `.gcf-frage` trägt nur, was die Zahl braucht; das Aussehen kommt vom Projekt
+   (`className`) oder von `.gcf-frage-standard`. */
+.gcf-frage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.gcf-frage-standard {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+.gcf-frage-standard:hover,
+.gcf-frage-standard[aria-expanded="true"] {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.gcf-frage:focus-visible {
+  outline: 2px solid var(--gcf-primaer);
+  outline-offset: 2px;
+}
+.gcf-frage-zahl {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(30%, -30%);
+  min-width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--gcf-gefahr);
+  color: #fff;
+  font: 700 10px/16px var(--gcf-schrift);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ── „Erledigte": ein echtes Kästchen, neu gezeichnet ────────────────────── */
+.gcf-haken {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+.gcf-haken input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.gcf-haken-kasten {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--gcf-kante);
+  border-radius: 4px;
+  background: var(--gcf-flaeche);
+  color: transparent;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.gcf-haken:hover .gcf-haken-kasten {
+  border-color: var(--gcf-leise);
+}
+.gcf-haken input:checked + .gcf-haken-kasten {
+  background: var(--gcf-primaer);
+  border-color: var(--gcf-primaer);
+  color: var(--gcf-primaer-text);
+}
+.gcf-haken:has(input:focus-visible) {
+  outline: 2px solid var(--gcf-primaer);
+  outline-offset: 2px;
 }
 
 /* ── Gemeinsame Knöpfe ───────────────────────────────────────────────────── */

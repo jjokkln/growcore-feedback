@@ -6,8 +6,8 @@ eine KI-Hilfe. Alles landet im zentralen Eingang des Projektraums — die
 Kunden-App speichert nichts selbst.
 
 - `@growcore/feedback` — Typen, Verankerung, Export, Zielkatalog (framework-frei)
-- `@growcore/feedback/react` — Overlay und KI-Hilfe (Client)
-- `@growcore/feedback/next` — `feedbackRoute()` und `<FeedbackWerkzeug />` (Server)
+- `@growcore/feedback/react` — Overlay, `?`-Knopf und KI-Hilfe (Client)
+- `@growcore/feedback/next` — `feedbackRoute()`, `<FeedbackWerkzeug />` und `<FeedbackKnopf />` (Server)
 - `@growcore/feedback/styles.css`
 
 Einbau: [INSTALL.md](INSTALL.md). Herkunft und Entscheidungen stehen im
