@@ -114,6 +114,14 @@ Und das CSS nach dem eigenen, z. B. in `globals.css`:
 :root { --gcf-primaer: <Projektfarbe>; --gcf-schrift: <Projektschrift>; }
 ```
 
+⚠️ Die `:root`-Überschreibung **nicht** in `@layer base` (oder einen anderen
+Layer) legen: Das Paket-CSS liegt ungelayert, und ungelayertes CSS schlägt
+jeden Layer — das Werkzeug bliebe in den Standardfarben. Gemessen beim ersten
+Einbau (Straffälligenhilfe, 2026-09-28).
+
+Bei `trailingSlash: true` antwortet `/api/feedback/…` ohne Schrägstrich mit
+308; Browser folgen dem samt Methode und Inhalt, `curl` braucht `-L`.
+
 Große Einheiten der Seite bekommen `data-review-anker="Name"`, damit
 Anmerkungen daran hängen und in der Liste lesbar heißen.
 
