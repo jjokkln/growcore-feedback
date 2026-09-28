@@ -1,0 +1,425 @@
+/*
+ * @growcore/feedback — Stile. Einbinden NACH dem eigenen CSS:
+ *   @import "@growcore/feedback/styles.css";
+ *
+ * Farben über `--gcf-*`. Ein Projekt überschreibt sie auf `:root`, z. B.
+ *   :root { --gcf-primaer: #14512c; }
+ * Die vier Markenfarben (rot, grün, blau, gold) sind fest im Code — sie
+ * müssen auf jeder Seite dieselben sein, damit man sieht, wer spricht.
+ */
+:root {
+  --gcf-flaeche: #ffffff;
+  --gcf-grund: #ffffff;
+  --gcf-leiste: #fbfbfa;
+  --gcf-text: #1f1d1a;
+  --gcf-leise: #5f5a52;
+  --gcf-kante: #d9d4ca;
+  --gcf-primaer: #1f1d1a;
+  --gcf-primaer-text: #ffffff;
+  --gcf-gefahr: #b42318;
+  --gcf-muted: #f1eee8;
+  --gcf-schrift: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.gcf-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[data-review-ui] :focus-visible,
+[data-ki-ui] :focus-visible,
+[data-ki-ui]:focus-visible {
+  outline: 2px solid var(--gcf-primaer);
+  outline-offset: 2px;
+}
+
+/* ── Anmerkungs-Leiste ───────────────────────────────────────────────────── */
+.gcf-leiste {
+  max-width: calc(100vw - 24px);
+}
+@media (min-width: 768px) {
+  .gcf-leiste {
+    max-width: calc(100vw - 320px);
+  }
+}
+
+/* ── Gemeinsame Knöpfe ───────────────────────────────────────────────────── */
+.gcf-knopf {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: 500 12px/1 var(--gcf-schrift);
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--gcf-kante);
+  background: var(--gcf-flaeche);
+  color: var(--gcf-text);
+  cursor: pointer;
+}
+.gcf-knopf:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.gcf-primaer {
+  background: var(--gcf-primaer);
+  color: var(--gcf-primaer-text);
+  border-color: transparent;
+  font-weight: 600;
+}
+.gcf-breit {
+  width: 100%;
+  padding: 9px 12px;
+}
+.gcf-leise-knopf {
+  font: 400 12px/1.2 var(--gcf-schrift);
+  color: var(--gcf-leise);
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.gcf-leise-knopf:hover {
+  color: var(--gcf-text);
+}
+.gcf-icon-knopf {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--gcf-text);
+  cursor: pointer;
+}
+.gcf-icon-knopf:hover {
+  background: var(--gcf-muted);
+}
+.gcf-icon-knopf.gcf-primaer:hover {
+  background: var(--gcf-primaer);
+  opacity: 0.9;
+}
+.gcf-icon-knopf:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.gcf-klein {
+  font: 400 12px/1.4 var(--gcf-schrift);
+  color: var(--gcf-leise);
+  margin: 4px 0 0;
+}
+.gcf-leise {
+  color: var(--gcf-leise);
+}
+.gcf-eyebrow {
+  font: 600 11px/1.3 var(--gcf-schrift);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gcf-leise);
+  margin: 0;
+}
+
+/* ── KI-Hilfe ────────────────────────────────────────────────────────────── */
+.gcf-ki-knopf {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147481500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 999px;
+  background: var(--gcf-primaer);
+  color: var(--gcf-primaer-text);
+  font: 600 14px/1 var(--gcf-schrift);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.gcf-ki-knopf:hover {
+  transform: translateY(-1px);
+}
+/* Auf dem Handy über der Anmerkungs-Leiste, nicht auf ihr. */
+@media (max-width: 767px) {
+  .gcf-ki-knopf {
+    bottom: 84px;
+    right: 12px;
+    padding: 9px 13px;
+  }
+}
+
+.gcf-ki-fenster {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2147482500;
+  display: flex;
+  flex-direction: column;
+  height: min(78dvh, 640px);
+  overflow: hidden;
+  border: 1px solid var(--gcf-kante);
+  border-radius: 12px;
+  background: var(--gcf-flaeche);
+  color: var(--gcf-text);
+  font-family: var(--gcf-schrift);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+@media (min-width: 768px) {
+  .gcf-ki-fenster {
+    left: auto;
+    right: 16px;
+    bottom: 16px;
+    width: 390px;
+  }
+}
+.gcf-ki-kopf {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--gcf-kante);
+}
+.gcf-ki-zeichen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  margin-top: 2px;
+  border-radius: 8px;
+  background: var(--gcf-muted);
+  color: var(--gcf-primaer);
+}
+.gcf-ki-titel {
+  font: 600 14px/1.2 var(--gcf-schrift);
+  margin: 0;
+}
+.gcf-ki-liste {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.gcf-ki-fuss {
+  border-top: 1px solid var(--gcf-kante);
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.gcf-ki-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+.gcf-ki-feld {
+  flex: 1;
+  min-height: 40px;
+  max-height: 128px;
+  resize: none;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid var(--gcf-kante);
+  border-radius: 9px;
+  background: var(--gcf-grund);
+  color: var(--gcf-text);
+  font: 400 14px/1.4 var(--gcf-schrift);
+}
+.gcf-vorschlaege {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gcf-vorschlag {
+  font: 400 12px/1.3 var(--gcf-schrift);
+  padding: 6px 11px;
+  border: 1px solid var(--gcf-kante);
+  border-radius: 999px;
+  background: var(--gcf-flaeche);
+  color: var(--gcf-text);
+  cursor: pointer;
+  text-align: left;
+}
+.gcf-vorschlag:hover {
+  background: var(--gcf-muted);
+}
+.gcf-fehler {
+  font: 400 13px/1.45 var(--gcf-schrift);
+  color: var(--gcf-gefahr);
+  margin: 0;
+}
+.gcf-blase-rechts {
+  display: flex;
+  justify-content: flex-end;
+}
+.gcf-blase-links {
+  max-width: 94%;
+}
+.gcf-blase {
+  margin: 0;
+  font: 400 14px/1.55 var(--gcf-schrift);
+  border-radius: 16px;
+  padding: 9px 12px;
+}
+.gcf-blase-nutzer {
+  max-width: 85%;
+  white-space: pre-wrap;
+  background: var(--gcf-primaer);
+  color: var(--gcf-primaer-text);
+  border-bottom-right-radius: 5px;
+}
+.gcf-blase-ki {
+  display: grid;
+  gap: 10px;
+  background: var(--gcf-muted);
+  border-top-left-radius: 5px;
+}
+.gcf-ki-marke {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+  font: 600 11px/1 var(--gcf-schrift);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gcf-leise);
+}
+.gcf-absatz {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.gcf-schritte {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.gcf-schritte::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 11px;
+  width: 1px;
+  background: var(--gcf-kante);
+}
+.gcf-schritt {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.gcf-schritt-nr {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--gcf-primaer);
+  color: var(--gcf-primaer-text);
+  font: 600 12px/1 var(--gcf-schrift);
+  box-shadow: 0 0 0 4px var(--gcf-muted);
+}
+.gcf-zeigen {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gcf-primaer);
+  font: 600 12px/1.3 var(--gcf-schrift);
+  cursor: pointer;
+}
+.gcf-zeigen:hover {
+  background: var(--gcf-flaeche);
+}
+.gcf-hinweis {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--gcf-leise);
+}
+.gcf-hinweis svg {
+  margin-top: 3px;
+  flex: none;
+}
+
+/* ── Führung ─────────────────────────────────────────────────────────────── */
+.gcf-rahmen {
+  box-shadow:
+    0 0 0 3px var(--gcf-primaer),
+    0 0 0 9999px rgba(0, 0, 0, 0.18);
+}
+.gcf-karte {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: min(320px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid var(--gcf-kante);
+  border-radius: 12px;
+  background: var(--gcf-flaeche);
+  color: var(--gcf-text);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+.gcf-karte-text {
+  margin: 4px 0 0;
+  font: 400 14px/1.4 var(--gcf-schrift);
+}
+.gcf-karte-leiste {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gcf-schritt {
+    animation: gcf-schritt 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+  .gcf-rahmen {
+    animation: gcf-puls 1.6s ease-in-out infinite;
+  }
+}
+@keyframes gcf-schritt {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+@keyframes gcf-puls {
+  50% {
+    box-shadow:
+      0 0 0 6px var(--gcf-primaer),
+      0 0 0 9999px rgba(0, 0, 0, 0.18);
+  }
+}
