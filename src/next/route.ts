@@ -5,13 +5,13 @@ import {
   kiEingabeSchema,
   neueAnmerkungSchema,
   type Anmerkung,
-  type Antwort,
   type Autor,
 } from "../core/typen.ts";
 import { systemAnweisung, type KiWissen } from "./anweisungen.ts";
 import { besucherKennung, bremse } from "./bremse.ts";
-import { eingang, EingangFehler } from "./eingang.ts";
+import { EingangFehler } from "./eingang.ts";
 import { frageStreamen, KiFehler } from "./gemini.ts";
+import { eingangsSpeicher, type FeedbackSpeicher, type Zeile } from "./speicher.ts";
 
 /**
  * Der Server-Teil in der Kunden-App: eine Catch-all-Route, die das Overlay
@@ -38,12 +38,19 @@ import { frageStreamen, KiFehler } from "./gemini.ts";
 export interface FeedbackRouteOptionen {
   /** Ohne `ki` gibt es keine KI-Hilfe, auch nicht mit `KI_HILFE=1`. */
   ki?: KiWissen;
+  /**
+   * Eigener Speicher statt des Eingangs im Projektraum. Für Projekte, deren
+   * Seiten Personendaten zeigen: Anmerkungen bleiben in der eigenen Datenbank.
+   */
+  speicher?: FeedbackSpeicher;
+  /**
+   * Wer fragt, festgestellt vom Server (Sitzung), nicht vom Browser. Gibt die
+   * Funktion `null` zurück, ist die Antwort 401, und zwar für **jede** Route,
+   * auch Lesen und KI-Hilfe. Ohne diese Option gilt die Kennung aus dem Browser
+   * (Besucher ohne Konto).
+   */
+  identitaet?: (request: Request) => Promise<Autor | null>;
 }
-
-type Zeile = Omit<Anmerkung, "eigen" | "replies"> & {
-  author_ref?: string | null;
-  replies?: Array<Antwort & { author_ref?: string | null }>;
-};
 
 function json(daten: unknown, status = 200): Response {
   return Response.json(daten, { status, headers: { "cache-control": "no-store" } });
@@ -95,14 +102,22 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
   const an = () => process.env.FEEDBACK === "1";
+  const speicher = optionen.speicher ?? eingangsSpeicher;
+  /** Mit Konto zählt das Konto, sonst die Kennung des Browsers. */
+  const wer = async (request: Request): Promise<Autor | null> =>
+    optionen.identitaet ? optionen.identitaet(request) : autorAus(request);
+  const schluessel = (request: Request, autor: Autor | null) =>
+    optionen.identitaet && autor ? autor.ref : besucherKennung(request);
 
   async function behandle(request: Request, methode: string): Promise<Response> {
     if (!an()) return fehler(404, "Nicht gefunden.");
     const [bereich, id, unter] = segmente(request);
 
     try {
-      if (bereich === "anmerkungen") return await anmerkungen(request, methode, id, unter);
-      if (bereich === "ki-hilfe" && methode === "POST" && !id) return await kiHilfe(request);
+      const autor = await wer(request);
+      if (optionen.identitaet && !autor) return fehler(401, "Bitte melde dich an.");
+      if (bereich === "anmerkungen") return await anmerkungen(request, methode, id, unter, autor);
+      if (bereich === "ki-hilfe" && methode === "POST" && !id) return await kiHilfe(request, autor);
       return fehler(404, "Nicht gefunden.");
     } catch (e) {
       if (e instanceof EingangFehler) return fehler(e.status, e.message);
@@ -116,55 +131,50 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     methode: string,
     id: string | undefined,
     unter: string | undefined,
+    autor: Autor | null,
   ): Promise<Response> {
-    const autor = autorAus(request);
-
     if (methode === "GET" && !id) {
-      const { anmerkungen: zeilen } = await eingang<{ anmerkungen: Zeile[] }>("/anmerkungen", { method: "GET" });
+      const zeilen = await speicher.liste();
       return json({ anmerkungen: zeilen.map((z) => zuBrowser(z, autor?.ref ?? null)) });
     }
 
     if (!autor) return fehler(400, "Ohne Kennung lässt sich nichts speichern. Bitte die Seite neu laden.");
-    if (!bremse(`schreiben:${besucherKennung(request)}`, 40, 3_600_000)) {
+    if (!bremse(`schreiben:${schluessel(request, autor)}`, 40, 3_600_000)) {
       return fehler(429, "Das waren viele Anmerkungen in kurzer Zeit. Bitte etwas später weitermachen.");
     }
 
     if (methode === "POST" && !id) {
       const eingabe = neueAnmerkungSchema.safeParse(await leseJson(request));
       if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Anmerkung.");
-      const { anmerkung } = await eingang<{ anmerkung: Zeile }>("/anmerkungen", {
-        method: "POST",
-        body: { ...eingabe.data, author: autor },
-      });
+      const anmerkung = await speicher.anlegen(eingabe.data, autor);
       return json({ anmerkung: zuBrowser(anmerkung, autor.ref) }, 201);
     }
 
     if (!id || !UUID.test(id)) return fehler(404, "Unbekannte Anmerkung.");
-    const pfad = `/anmerkungen/${id}`;
 
     if (methode === "POST" && unter === "antworten") {
       const eingabe = antwortSchema.safeParse(await leseJson(request));
       if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Antwort.");
-      await eingang(`${pfad}/antworten`, { method: "POST", body: { body: eingabe.data.body, author: autor } });
+      await speicher.antworten(id, eingabe.data.body, autor);
       return json({ ok: true }, 201);
     }
     if (methode === "PATCH" && !unter) {
       const eingabe = erledigtSchema.safeParse(await leseJson(request));
       if (!eingabe.success) return fehler(400, "Ungültige Änderung.");
-      await eingang(pfad, { method: "PATCH", body: { done: eingabe.data.done, author: autor } });
+      await speicher.erledigt(id, eingabe.data.done, autor);
       return json({ ok: true });
     }
     if (methode === "DELETE" && !unter) {
-      await eingang(pfad, { method: "DELETE", body: { author: autor } });
+      await speicher.loeschen(id, autor);
       return json({ ok: true });
     }
     return fehler(404, "Nicht gefunden.");
   }
 
-  async function kiHilfe(request: Request): Promise<Response> {
+  async function kiHilfe(request: Request, autor: Autor | null): Promise<Response> {
     const ki = optionen.ki;
     if (!ki || process.env.KI_HILFE !== "1") return fehler(503, "Die KI-Hilfe ist nicht eingeschaltet.");
-    if (!bremse(`ki:${besucherKennung(request)}`, 20, 3_600_000)) {
+    if (!bremse(`ki:${schluessel(request, autor)}`, 20, 3_600_000)) {
       return fehler(429, "Das waren viele Fragen in kurzer Zeit. Bitte in einer Stunde wieder versuchen.");
     }
 
@@ -176,7 +186,7 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     // Erst melden, dann fragen: Jede Frage gehört in den Eingang (DECISIONS
     // 2026-09-28a), und der Eingang ist zugleich die Bremse je Projekt.
     // Scheitert die Meldung, wird nicht gefragt.
-    await eingang("/ki-fragen", { method: "POST", body: { question: frage.slice(0, 2000), path: seite } });
+    await speicher.kiFrage?.(frage, seite, autor);
 
     let stuecke: AsyncGenerator<string>;
     try {

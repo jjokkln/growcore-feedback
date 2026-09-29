@@ -102,11 +102,19 @@ export function selektorPfad(element: Element | null, maxTiefe = 8): string {
  * Lesbarer Name, in absteigender Verlässlichkeit:
  * `data-review-anker` → `aria-label` → erste Überschrift → `id` → Tag.
  */
-export function ankerLabel(element: Element | null): string {
+export function ankerLabel(element: Element | null, datensparsam = false): string {
   if (!element) return "Unbekannte Stelle";
 
   const gesetzt = element.getAttribute("data-review-anker");
   if (gesetzt?.trim()) return kuerze(gesetzt, 120);
+
+  // Datensparsam: nur, was das Projekt selbst als Namen vergeben hat. `aria-label`
+  // und Überschrift zeigen auf Seiten mit Personendaten den Menschen, um den es
+  // geht („Bewerber Max Muster"), und würden ihn in die Anmerkung kopieren.
+  if (datensparsam) {
+    if (element.id) return kuerze(`#${element.id}`, 120);
+    return kuerze(`<${element.tagName.toLowerCase()}>`, 120);
+  }
 
   const aria = element.getAttribute("aria-label");
   if (aria?.trim()) return kuerze(aria, 120);
@@ -131,9 +139,20 @@ export function ankerLabel(element: Element | null): string {
  * den Fließtext lesbar. Gemessen am 18.09.2026: zwei Punkte, 300 px
  * auseinander, beide mit derselben Sektionsüberschrift.
  */
-export function stellenLabel(getroffen: Element | null, sektion: Element | null): string {
-  const grob = ankerLabel(sektion);
+export function stellenLabel(
+  getroffen: Element | null,
+  sektion: Element | null,
+  datensparsam = false,
+): string {
+  const grob = ankerLabel(sektion, datensparsam);
   if (!getroffen || getroffen === sektion) return grob;
+
+  // Datensparsam kein Text, kein `alt`, kein `aria-label` des getroffenen
+  // Elements: Nur die Art des Elements sagt, wo geklickt wurde.
+  if (datensparsam) {
+    const tag = getroffen.tagName.toLowerCase();
+    return tag === "div" || tag === "span" ? grob : kuerze(`${grob} → <${tag}>`, 120);
+  }
 
   // ⚠️ `textContent` NUR bei einem Element ohne Element-Kinder. Bei einem
   // Container klebt es alle Kindtexte ohne Trennzeichen aneinander und

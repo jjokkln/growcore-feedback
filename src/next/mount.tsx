@@ -1,5 +1,6 @@
 import type { ZielKatalog } from "../core/ziele.ts";
 import { GrowcoreFeedback } from "../react/feedback.tsx";
+import type { OverlayModus } from "../react/overlay.tsx";
 import { AnmerkungsKnopf } from "../react/knopf.tsx";
 
 /**
@@ -15,6 +16,8 @@ export function FeedbackWerkzeug(props: {
   ziele?: ZielKatalog;
   /** Frage-Vorschläge im leeren KI-Fenster. */
   vorschlaege?: string[];
+  /** Datensparsam-Modus, ohne Namensfeld, Hinweiszeile. Siehe `OverlayModus`. */
+  modus?: OverlayModus;
 }) {
   if (process.env.FEEDBACK !== "1") return null;
   const ki = process.env.KI_HILFE === "1" && Boolean(props.ziele);
@@ -24,6 +27,7 @@ export function FeedbackWerkzeug(props: {
       kiHilfe={ki}
       ziele={props.ziele ?? {}}
       vorschlaege={props.vorschlaege ?? []}
+      modus={props.modus}
     />
   );
 }

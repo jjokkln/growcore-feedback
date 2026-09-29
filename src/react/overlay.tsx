@@ -98,14 +98,24 @@ function wer(n: Anmerkung): string {
   return `Anmerkung von ${n.author_label ?? "Gast"}`;
 }
 
-export function AnmerkungsOverlay({ projekt }: { projekt: string }) {
+/** Einstellungen für Projekte mit Personendaten auf den Seiten und mit Konten. */
+export interface OverlayModus {
+  /** Stellenbeschriftung nur aus `data-review-anker`, nie aus dem Seitentext. */
+  datensparsam?: boolean;
+  /** Die App kennt den Autor selbst (Konto): kein Namensfeld, kein Name im Browser. */
+  ohneName?: boolean;
+  /** Zeile unter dem Kommentarfeld, z. B. „Keine Namen oder Bewerberdaten eintragen." */
+  hinweis?: string;
+}
+
+export function AnmerkungsOverlay({ projekt, modus }: { projekt: string; modus?: OverlayModus }) {
   // Portal erst im Browser: Beim Server-Rendern gibt es kein `document.body`.
   const mounted = useMounted();
   if (!mounted) return null;
-  return createPortal(<Overlay projekt={projekt} />, document.body);
+  return createPortal(<Overlay projekt={projekt} einstellung={modus ?? {}} />, document.body);
 }
 
-function Overlay({ projekt }: { projekt: string }) {
+function Overlay({ projekt, einstellung }: { projekt: string; einstellung: OverlayModus }) {
   const pfad = normPfad(usePathname());
   const router = useRouter();
 
@@ -329,7 +339,7 @@ function Overlay({ projekt }: { projekt: string }) {
     const box = anker?.getBoundingClientRect() ?? new DOMRect(0, 0, 1, 1);
     return {
       anchor_selector: selektorPfad(anker) || "body",
-      anchor_label: stellenLabel(getroffen, anker),
+      anchor_label: stellenLabel(getroffen, anker, einstellung.datensparsam),
       points: punkte.map((p) => zuAnkerAnteil(p.x, p.y, box)),
       fallback: punkte.map((p) => zuDokumentAnteil(p.x, p.y)),
     };
@@ -373,13 +383,13 @@ function Overlay({ projekt }: { projekt: string }) {
       x: e.clientX,
       y: e.clientY,
       anchor_selector: selektorPfad(anker) || "body",
-      anchor_label: stellenLabel(getroffen, anker),
+      anchor_label: stellenLabel(getroffen, anker, einstellung.datensparsam),
     });
   };
 
   const entwurfAbschicken = async (text: string, name: string) => {
     if (!entwurf) return;
-    nameMerken(name);
+    if (!einstellung.ohneName) nameMerken(name);
 
     const gemeinsam = {
       path: pfad,
@@ -653,6 +663,7 @@ function Overlay({ projekt }: { projekt: string }) {
 
       {entwurf && (
         <EntwurfsFeld
+          einstellung={einstellung}
           entwurf={entwurf}
           farbe={farbe}
           laeuft={laeuft}
@@ -951,6 +962,7 @@ function Leiste(props: {
 
 /** Das Textfeld für einen neuen Kommentar, direkt an der geklickten Stelle. */
 function EntwurfsFeld(props: {
+  einstellung: OverlayModus;
   entwurf: Entwurf;
   farbe: KundenFarbe;
   laeuft: boolean;
@@ -959,7 +971,7 @@ function EntwurfsFeld(props: {
 }) {
   const [text, setText] = useState("");
   const [name, setName] = useState(gespeicherterName);
-  const nameFehlt = !gespeicherterName();
+  const nameFehlt = !props.einstellung.ohneName && !gespeicherterName();
   const feldRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -1027,6 +1039,9 @@ function EntwurfsFeld(props: {
           resize: "vertical",
         }}
       />
+      {props.einstellung.hinweis && (
+        <p style={{ margin: "6px 0 0", font: `400 12px/1.4 ${T.schrift}`, color: T.leise }}>{props.einstellung.hinweis}</p>
+      )}
       {nameFehlt && (
         <input
           aria-label="Ihr Name (optional)"

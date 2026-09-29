@@ -24,7 +24,7 @@ Grundsatz: DECISIONS 2026-09-28a im AI-OS.
 ## 1. Installieren
 
 ```bash
-npm i "git+https://github.com/jjokkln/growcore-feedback.git#v0.3.0"
+npm i "git+https://github.com/jjokkln/growcore-feedback.git#v0.4.0"
 ```
 
 Immer auf einen **Tag** festnageln, nie auf `main`. `npm` schreibt `git+ssh://`
@@ -176,8 +176,46 @@ auslösen).
 Neuer Tag im Paket → in jedem Einbau `npm i "git+https://…#vX.Y.Z"`. Einbauten
 stehen in der Projektkarte `growcore-feedback` im AI-OS.
 
+
+## 10. Projekte mit Personendaten und Konten (seit v0.4.0)
+
+Zeigen die Seiten Personendaten (Bewerber, Patienten, Mitarbeiter), darf **nichts**
+davon in den zentralen Eingang im Projektraum wandern. Dann läuft das Werkzeug
+gegen einen **eigenen Speicher in der eigenen Datenbank** und mit der **Identität
+aus der Sitzung**:
+
+```ts
+export const { GET, POST, PATCH, DELETE } = feedbackRoute({
+  ki: KI_WISSEN,
+  speicher: meinSpeicher,                       // implementiert FeedbackSpeicher
+  identitaet: async (request) => { /* Sitzung prüfen, Rolle prüfen, { ref, label } oder null */ },
+});
+```
+
+```tsx
+<FeedbackWerkzeug projekt="…" ziele={ZIELE}
+  modus={{ datensparsam: true, ohneName: true, hinweis: "Keine Namen oder Bewerberdaten eintragen." }} />
+```
+
+- `identitaet` gibt `null` → **401 auf jeder Route**, auch Lesen und KI. Die Kopfzeilen
+  `x-gcf-autor`/`x-gcf-name` des Browsers zählen dann nicht mehr.
+- `FeedbackSpeicher` (`liste`, `anlegen`, `antworten`, `erledigt`, `loeschen`, optional
+  `kiFrage`): Fehler als `EingangFehler(status, text)` werfen. Ohne `kiFrage` wird der
+  Wortlaut einer KI-Frage nirgends festgehalten.
+- `datensparsam`: Die Stellenbeschriftung kommt **nur** aus `data-review-anker` (sonst
+  `#id` oder `<tag>`), nie aus Überschrift, `aria-label`, `alt` oder Text. Große
+  Einheiten der Seite deshalb mit `data-review-anker="Name"` benennen.
+- `ohneName`: kein Namensfeld, nichts im Browser gemerkt.
+- Kein `GROWCORE_FEEDBACK_KEY` nötig. Das Projekt braucht keinen Eintrag im Projektraum.
+- ⚠️ Der Anmerkungstext selbst bleibt Freitext. `hinweis` sagt, was nicht hineingehört;
+  technisch verhindern lässt es sich nicht.
+- ⚠️ Die KI-Hilfe schickt Fragen an Vertex AI (Google). Wer Fragen über Personen stellt,
+  schickt sie dorthin. Das Wissen der KI (`KI_WISSEN`) enthält nur Beschreibung der
+  Oberfläche, keine Daten.
+
 ## Änderungen
 
+- **v0.4.0** (2026-09-29): Eigener Speicher (`speicher`) und Identität aus der Sitzung (`identitaet`) für Projekte mit Personendaten; `modus` (`datensparsam`, `ohneName`, `hinweis`). Ohne diese Optionen verhält sich alles wie in v0.3.0.
 - **v0.3.0** (2026-09-28): Der Einstieg ist ein `?` in der Navigation
   (`FeedbackKnopf` bzw. `AnmerkungsKnopf`), mit der Zahl offener Anmerkungen.
   Die Leiste ist anfangs zu, nichts schwebt. Ein Klick aufs `?` schließt sie
