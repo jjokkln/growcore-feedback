@@ -206,6 +206,9 @@ export const { GET, POST, PATCH, DELETE } = feedbackRoute({
   `#id` oder `<tag>`), nie aus Überschrift, `aria-label`, `alt` oder Text. Große
   Einheiten der Seite deshalb mit `data-review-anker="Name"` benennen.
 - `ohneName`: kein Namensfeld, nichts im Browser gemerkt.
+- `autorName` (seit v0.5.0): der Name aus dem Konto, steht fest im Kommentar- und
+  Einkreisfeld („Als: …"). Nicht änderbar, weil der Server den Namen aus der Sitzung nimmt.
+  Mit `ohneName` zusammen setzen; die App übergibt ihn im Layout aus dem Profil.
 - Kein `GROWCORE_FEEDBACK_KEY` nötig. Das Projekt braucht keinen Eintrag im Projektraum.
 - ⚠️ Der Anmerkungstext selbst bleibt Freitext. `hinweis` sagt, was nicht hineingehört;
   technisch verhindern lässt es sich nicht.
@@ -215,6 +218,7 @@ export const { GET, POST, PATCH, DELETE } = feedbackRoute({
 
 ## Änderungen
 
+- **v0.5.0** (2026-09-29): Leiste zu = alles weg. Ist die Leiste über das `?` geschlossen, zeigt die Seite keine Punkte, keine Kreise und kein offenes Fenster mehr (vorher blieben sie sichtbar). Die Zahl am `?` zählt weiter. Neu `modus.autorName`: Name aus dem Konto fest im Feld.
 - **v0.4.0** (2026-09-29): Eigener Speicher (`speicher`) und Identität aus der Sitzung (`identitaet`) für Projekte mit Personendaten; `modus` (`datensparsam`, `ohneName`, `hinweis`). Ohne diese Optionen verhält sich alles wie in v0.3.0.
 - **v0.3.0** (2026-09-28): Der Einstieg ist ein `?` in der Navigation
   (`FeedbackKnopf` bzw. `AnmerkungsKnopf`), mit der Zahl offener Anmerkungen.

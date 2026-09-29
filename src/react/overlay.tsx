@@ -106,6 +106,12 @@ export interface OverlayModus {
   ohneName?: boolean;
   /** Zeile unter dem Kommentarfeld, z. B. „Keine Namen oder Bewerberdaten eintragen." */
   hinweis?: string;
+  /**
+   * Mit Konto: der Name, unter dem die Anmerkung gespeichert wird. Steht fest
+   * im Feld („Als: …"), nicht änderbar — der Server nimmt ihn ohnehin aus der
+   * Sitzung (`identitaet`), ein Eingabefeld würde etwas versprechen, das nicht gilt.
+   */
+  autorName?: string;
 }
 
 export function AnmerkungsOverlay({ projekt, modus }: { projekt: string; modus?: OverlayModus }) {
@@ -146,6 +152,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       setModus("ansehen");
       setEntwurf(null);
       setListeAuf(false);
+      setOffen(null);
     }
   }
   const [meldung, setMeldung] = useState<string | null>(null);
@@ -169,7 +176,10 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   const entwurfRef = useRef<Entwurf | null>(null);
   const entwurfPfadRef = useRef<SVGPathElement | null>(null);
 
-  const sichtbare = notizen.filter((n) => zeigeErledigte || !n.done);
+  // Leiste zu = Werkzeug weg: keine Punkte, keine Kreise, kein offenes Fenster
+  // (Lenny, 2026-09-29 — wer normal arbeitet, soll nichts davon sehen). Die
+  // Zahl am `?` zählt weiter alle offenen, damit Neues nicht untergeht.
+  const sichtbare = leisteOffen ? notizen.filter((n) => zeigeErledigte || !n.done) : [];
   const offeneAnzahl = notizen.filter((n) => !n.done).length;
 
   // Der `?`-Knopf in der Navigation zeigt die Zahl (einstieg.ts).
@@ -491,7 +501,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   // ── Darstellung ──────────────────────────────────────────────────────────
   const pins = sichtbare.filter((n) => n.shape === "pin");
   const striche = sichtbare.filter((n) => n.shape === "stroke");
-  const offeneNotiz = notizen.find((n) => n.id === offen) ?? null;
+  const offeneNotiz = leisteOffen ? (notizen.find((n) => n.id === offen) ?? null) : null;
   const nummerVon = (n: Anmerkung) => pins.findIndex((p) => p.id === n.id) + 1;
 
   return (
@@ -1041,6 +1051,11 @@ function EntwurfsFeld(props: {
       />
       {props.einstellung.hinweis && (
         <p style={{ margin: "6px 0 0", font: `400 12px/1.4 ${T.schrift}`, color: T.leise }}>{props.einstellung.hinweis}</p>
+      )}
+      {props.einstellung.autorName && (
+        <p style={{ margin: "6px 0 0", font: `400 12px/1.4 ${T.schrift}`, color: T.text }}>
+          Als: <strong style={{ fontWeight: 600 }}>{props.einstellung.autorName}</strong>
+        </p>
       )}
       {nameFehlt && (
         <input
