@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { knopfAnmelden, useEinstieg, useLeisteOffen } from "./einstieg.ts";
+import { knopfAnmelden, useEinstieg, useLeisteOffen, useWerkzeugAn } from "./einstieg.ts";
 import { Frage } from "./icons.tsx";
 
 /**
@@ -21,6 +21,13 @@ import { Frage } from "./icons.tsx";
  * erscheint unten links der Stift als Notnagel.
  */
 export function AnmerkungsKnopf({ className }: { className?: string }) {
+  // Zentral ausgeschaltet: kein `?` — und auch kein angemeldeter Knopf, sonst
+  // fiele der Stift-Notnagel weg, obwohl gar nichts zu sehen ist.
+  if (!useWerkzeugAn()) return null;
+  return <Knopf className={className} />;
+}
+
+function Knopf({ className }: { className?: string }) {
   const [offen, setOffen] = useLeisteOffen();
   const { offeneAnzahl } = useEinstieg();
 

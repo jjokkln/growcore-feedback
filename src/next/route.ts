@@ -25,6 +25,8 @@ import { eingangsSpeicher, type FeedbackSpeicher, type Zeile } from "./speicher.
  * ─── Die Prüfungen, in dieser Reihenfolge ───────────────────────────────────
  *
  * 1. **Eingeschaltet?** `FEEDBACK=1`, sonst 404 — die Route gibt es dann nicht.
+ *    Dazu (0.7.0) der Schalter bei der Sammelstelle (`speicher.status()`,
+ *    30 s gemerkt): aus → jeder Pfad 404, `GET /status` sagt `{ an: false }`.
  *    Die KI-Hilfe braucht zusätzlich `KI_HILFE=1`.
  * 2. **Wer?** Kein Konto: Der Browser schickt eine selbst erzeugte Kennung
  *    (`x-gcf-autor`) und einen Namen (`x-gcf-name`). Die Kennung ist der
@@ -109,9 +111,27 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
   const schluessel = (request: Request, autor: Autor | null) =>
     optionen.identitaet && autor ? autor.ref : besucherKennung(request);
 
+  // Der Schalter bei der Sammelstelle, je Server-Instanz 30 s gemerkt: Das
+  // Overlay fragt bei jedem Laden, und nicht jeder Aufruf soll die
+  // Sammelstelle zweimal treffen. Ausschalten wirkt also nach spätestens 30 s.
+  let schalter: { an: boolean; bis: number } | null = null;
+  const zentralAn = async (): Promise<boolean> => {
+    if (!speicher.status) return true;
+    if (schalter && schalter.bis > Date.now()) return schalter.an;
+    const jetzt = await speicher.status().catch(() => false);
+    schalter = { an: jetzt, bis: Date.now() + 30_000 };
+    return jetzt;
+  };
+
   async function behandle(request: Request, methode: string): Promise<Response> {
     if (!an()) return fehler(404, "Nicht gefunden.");
     const [bereich, id, unter] = segmente(request);
+
+    if (bereich === "status" && !id && methode === "GET") {
+      // Ohne Anmeldung beantwortbar: Es verrät nur, ob das `?` erscheinen soll.
+      return json({ an: await zentralAn() });
+    }
+    if (!(await zentralAn())) return fehler(404, "Das Feedback-Werkzeug ist ausgeschaltet.");
 
     try {
       const autor = await wer(request);

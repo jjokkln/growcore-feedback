@@ -60,3 +60,61 @@ export function offeneMelden(anzahl: number) {
 export function useLeisteOffen(): [boolean, (offen: boolean) => void] {
   return useLocalStorageState(SCHLUESSEL, false);
 }
+
+// ─── Fernschalter (0.7.0) ──────────────────────────────────────────────────
+
+/**
+ * Ob das Werkzeug für dieses Projekt gerade eingeschaltet ist. Entschieden
+ * wird es zentral — im Projektraum bzw. in der Sammelstelle des Projekts —,
+ * gefragt wird über die eigene Route (`GET /api/feedback/status`).
+ *
+ * `null` = noch nicht bekannt. Bis die Antwort da ist, zeigt nichts sich:
+ * lieber eine halbe Sekunde später als ein `?`, das gleich wieder verschwindet.
+ * Nur ein ausdrückliches `{ an: true }` schaltet ein; jede andere Antwort,
+ * auch ein Fehler, lässt das Werkzeug aus.
+ *
+ * Gefragt wird einmal je Seitenaufruf und erneut, wenn der Reiter wieder in
+ * den Blick kommt — so wirkt ein Ausschalten ohne Neuladen.
+ */
+let an: boolean | null = null;
+let laeuft = false;
+let zuletzt = 0;
+const anHoerer = new Set<() => void>();
+
+async function anFragen(): Promise<void> {
+  if (laeuft) return;
+  laeuft = true;
+  zuletzt = Date.now();
+  let neu = false;
+  try {
+    const antwort = await fetch("/api/feedback/status", { cache: "no-store" });
+    const daten = antwort.ok ? ((await antwort.json().catch(() => ({}))) as { an?: unknown }) : {};
+    neu = daten.an === true;
+  } catch {
+    neu = false;
+  }
+  laeuft = false;
+  if (neu !== an) {
+    an = neu;
+    anHoerer.forEach((h) => h());
+  }
+}
+
+function anAbonnieren(h: () => void) {
+  anHoerer.add(h);
+  if (an === null) void anFragen();
+  const beiSicht = () => {
+    // Höchstens alle 20 s, sonst fragt jeder Reiterwechsel den Server.
+    if (!document.hidden && Date.now() - zuletzt > 20_000) void anFragen();
+  };
+  document.addEventListener("visibilitychange", beiSicht);
+  return () => {
+    anHoerer.delete(h);
+    document.removeEventListener("visibilitychange", beiSicht);
+  };
+}
+
+/** `true` nur, wenn die Sammelstelle das Werkzeug für dieses Projekt eingeschaltet hat. */
+export function useWerkzeugAn(): boolean {
+  return useSyncExternalStore(anAbonnieren, () => an === true, () => false);
+}

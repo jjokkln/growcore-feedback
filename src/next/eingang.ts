@@ -58,3 +58,35 @@ export async function eingang<T>(
   }
   return daten as T;
 }
+
+/**
+ * Fragt die Sammelstelle, ob das Werkzeug für dieses Projekt an ist (0.7.0).
+ *
+ * - `{ an: true|false }` → genau das.
+ * - 404 → die Sammelstelle kennt den Schalter noch nicht (ältere Fassung):
+ *   „an", damit ein Paket-Update nichts ausschaltet, bevor die Sammelstelle
+ *   nachgezogen ist.
+ * - Alles andere (kein Schlüssel, abgewiesen, nicht erreichbar) → „aus".
+ *   Lieber kein Werkzeug als eines, das bei jedem Klick einen Fehler zeigt.
+ */
+export async function eingangStatus(): Promise<boolean> {
+  const schluessel = process.env.GROWCORE_FEEDBACK_KEY?.trim();
+  if (!schluessel) return false;
+  const basis = (process.env.GROWCORE_FEEDBACK_URL?.trim() || STANDARD_URL).replace(/\/$/, "");
+  try {
+    const antwort = await fetch(`${basis}/api/feedback/status`, {
+      headers: { authorization: `Bearer ${schluessel}` },
+      cache: "no-store",
+    });
+    if (antwort.status === 404) return true;
+    if (!antwort.ok) {
+      if (antwort.status === 401) console.error("[feedback] Schlüssel abgewiesen — GROWCORE_FEEDBACK_KEY prüfen.");
+      return false;
+    }
+    const daten = (await antwort.json().catch(() => ({}))) as { an?: unknown };
+    return daten.an === true;
+  } catch (e) {
+    console.error("[feedback] Eingang nicht erreichbar:", e instanceof Error ? e.message : e);
+    return false;
+  }
+}

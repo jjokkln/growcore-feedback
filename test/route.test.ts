@@ -30,14 +30,23 @@ const zeile = (author_ref: string | null, from_agency = false) => ({
 
 let aufrufe: Array<{ url: string; init: RequestInit }> = [];
 let antwortVomEingang: () => Response;
+/** Der Schalter der Sammelstelle (0.7.0) — getrennt gezählt, `aufrufe` bleibt bei den Daten. */
+let statusVomEingang: () => Response;
+let statusAufrufe = 0;
 const echtesFetch = globalThis.fetch;
 
 beforeEach(() => {
   process.env.FEEDBACK = "1";
   process.env.GROWCORE_FEEDBACK_KEY = "gcf_test";
   aufrufe = [];
+  statusAufrufe = 0;
   antwortVomEingang = () => Response.json({ anmerkungen: [zeile(REF), zeile(FREMD), zeile(null, true)] });
+  statusVomEingang = () => Response.json({ an: true });
   globalThis.fetch = (async (url: string, init: RequestInit) => {
+    if (String(url).endsWith("/api/feedback/status")) {
+      statusAufrufe++;
+      return statusVomEingang();
+    }
     aufrufe.push({ url: String(url), init });
     return antwortVomEingang();
   }) as typeof fetch;
@@ -156,4 +165,60 @@ test("Antwortparser: unbekannte Ziele fallen weg, halbe Marken blitzen nicht auf
   assert.equal(a.einleitung, "So geht es.");
   assert.deepEqual(a.schritte.map((s) => s.ziel), ["spenden", null, null]);
   assert.equal(a.schritte[2]?.text, "Halb");
+});
+
+// ─── Fernschalter (0.7.0) ───────────────────────────────────────────────────
+
+test("Schalter an: /status sagt an, der Rest läuft wie bisher", async () => {
+  const { GET } = feedbackRoute();
+  const antwort = await GET(anfrage("/status", { ref: null }));
+  assert.equal(antwort.status, 200);
+  assert.deepEqual(await antwort.json(), { an: true });
+  assert.equal((await GET(anfrage("/anmerkungen"))).status, 200);
+  // 30 s gemerkt: zweimal gefragt, einmal bei der Sammelstelle.
+  assert.equal(statusAufrufe, 1);
+});
+
+test("Schalter aus: /status sagt aus, alle anderen Pfade 404, kein Datenaufruf", async () => {
+  statusVomEingang = () => Response.json({ an: false });
+  const { GET, POST } = feedbackRoute();
+  assert.deepEqual(await (await GET(anfrage("/status", { ref: null }))).json(), { an: false });
+  assert.equal((await GET(anfrage("/anmerkungen"))).status, 404);
+  const neu = { path: "/", shape: "pin", body: "x", anchor_selector: "#a", anchor_label: "A", points: [{ x: 0, y: 0 }], fallback: [{ x: 0, y: 0 }], color: "rot" };
+  assert.equal((await POST(anfrage("/anmerkungen", { method: "POST", body: JSON.stringify(neu) }))).status, 404);
+  assert.equal(aufrufe.length, 0);
+});
+
+test("Sammelstelle ohne Schalter (404) gilt als an, nicht erreichbar oder abgewiesen als aus", async () => {
+  statusVomEingang = () => Response.json({ fehler: "Nicht gefunden." }, { status: 404 });
+  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: true });
+
+  statusVomEingang = () => Response.json({ fehler: "Schlüssel ungültig." }, { status: 401 });
+  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: false });
+
+  statusVomEingang = () => {
+    throw new TypeError("fetch failed");
+  };
+  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: false });
+});
+
+test("ohne Schlüssel ist das Werkzeug aus, ohne die Sammelstelle zu fragen", async () => {
+  process.env.GROWCORE_FEEDBACK_KEY = "";
+  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: false });
+  assert.equal(statusAufrufe, 0);
+});
+
+test("eigener Speicher ohne status(): an; mit status(): dessen Antwort", async () => {
+  const leer = { liste: async () => [], anlegen: async () => { throw new Error(); }, antworten: async () => {}, erledigt: async () => {}, loeschen: async () => {} };
+  assert.deepEqual(await (await feedbackRoute({ speicher: leer }).GET(anfrage("/status", { ref: null }))).json(), { an: true });
+  const aus = { ...leer, status: async () => false };
+  const route = feedbackRoute({ speicher: aus });
+  assert.deepEqual(await (await route.GET(anfrage("/status", { ref: null }))).json(), { an: false });
+  assert.equal((await route.GET(anfrage("/anmerkungen"))).status, 404);
+});
+
+test("ohne FEEDBACK=1 gibt es auch /status nicht", async () => {
+  process.env.FEEDBACK = "";
+  assert.equal((await feedbackRoute().GET(anfrage("/status", { ref: null }))).status, 404);
+  assert.equal(statusAufrufe, 0);
 });

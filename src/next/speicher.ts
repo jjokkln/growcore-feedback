@@ -1,5 +1,5 @@
 import type { Anmerkung, Antwort, Autor, NeueAnmerkung } from "../core/typen.ts";
-import { eingang } from "./eingang.ts";
+import { eingang, eingangStatus } from "./eingang.ts";
 
 /** Eine Anmerkung samt Kennung des Autors, wie der Server sie kennt. Die Kennung geht nie zum Browser. */
 export type Zeile = Omit<Anmerkung, "eigen" | "replies"> & {
@@ -29,6 +29,12 @@ export interface FeedbackSpeicher {
   loeschen(id: string, autor: Autor): Promise<void>;
   /** Optional. Ohne diese Funktion wird der Wortlaut einer KI-Frage nirgends festgehalten. */
   kiFrage?(frage: string, seite: string, autor: Autor | null): Promise<void>;
+  /**
+   * Optional (0.7.0): Ist das Werkzeug für dieses Projekt eingeschaltet? Der
+   * Schalter liegt bei der Sammelstelle, nicht in der App. Ohne diese
+   * Funktion gilt „an" — dann entscheidet allein `FEEDBACK=1`.
+   */
+  status?(): Promise<boolean>;
 }
 
 /** Der Standard: alles über den Projektschlüssel an den Eingang im Projektraum. */
@@ -49,4 +55,5 @@ export const eingangsSpeicher: FeedbackSpeicher = {
   kiFrage: async (frage, seite) => {
     await eingang("/ki-fragen", { method: "POST", body: { question: frage.slice(0, 2000), path: seite } });
   },
+  status: eingangStatus,
 };

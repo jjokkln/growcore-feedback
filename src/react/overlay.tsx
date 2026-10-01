@@ -29,7 +29,7 @@ import {
   type Punkt,
 } from "../core/typen.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
-import { offeneMelden, useEinstieg, useLeisteOffen } from "./einstieg.ts";
+import { offeneMelden, useEinstieg, useLeisteOffen, useWerkzeugAn } from "./einstieg.ts";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
 import { Griff, Haken, Runter, Stift } from "./icons.tsx";
 import {
@@ -130,7 +130,8 @@ export interface OverlayModus {
 export function AnmerkungsOverlay({ projekt, modus }: { projekt: string; modus?: OverlayModus }) {
   // Portal erst im Browser: Beim Server-Rendern gibt es kein `document.body`.
   const mounted = useMounted();
-  if (!mounted) return null;
+  const werkzeugAn = useWerkzeugAn();
+  if (!mounted || !werkzeugAn) return null;
   return createPortal(<Overlay projekt={projekt} einstellung={modus ?? {}} />, document.body);
 }
 

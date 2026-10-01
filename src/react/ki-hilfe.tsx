@@ -8,6 +8,7 @@ import { leseAntwort, type Schritt } from "../core/ki-antwort.ts";
 import type { KiNachricht } from "../core/typen.ts";
 import type { ZielKatalog } from "../core/ziele.ts";
 import { Fuehrung, starteFuehrung } from "./fuehrung.tsx";
+import { useWerkzeugAn } from "./einstieg.ts";
 import { useMounted } from "./hooks.ts";
 import { Fadenkreuz, Funken, Hoch, Info, Pfeil, Runter, Start } from "./icons.tsx";
 import { KI_UI_ATTR } from "./ziel-finden.ts";
@@ -47,7 +48,8 @@ function normPfad(pfad: string | null): string {
 
 export function KiHilfe(props: { projekt: string; ziele: ZielKatalog; vorschlaege: string[] }) {
   const mounted = useMounted();
-  if (!mounted) return null;
+  const werkzeugAn = useWerkzeugAn();
+  if (!mounted || !werkzeugAn) return null;
   return createPortal(<KiHilfeInnen {...props} />, document.body);
 }
 
