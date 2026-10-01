@@ -216,8 +216,27 @@ export const { GET, POST, PATCH, DELETE } = feedbackRoute({
   schickt sie dorthin. Das Wissen der KI (`KI_WISSEN`) enthält nur Beschreibung der
   Oberfläche, keine Daten.
 
+## Ohne Next: eigenständige Fassung (ab v0.8.0)
+
+Für Seiten aus reinem HTML (z. B. arbeitsschutz-doc) oder exportierte Design-Seiten
+(giulianmokahli): ein Skript mit React, Overlay und Stil, dazu die Route als Node-Handler.
+
+1. **Skript ausliefern** unter einem eigenen Pfad, z. B. `/feedback/gcf.js`:
+   `const { standaloneSkript } = await import("@growcore/feedback/node")` → Text mit
+   `content-type: text/javascript`. In Next reicht eine Kopie nach `public/` beim Build
+   (`node_modules/@growcore/feedback/standalone/gcf.js`).
+2. **Einbinden**, nur wenn `FEEDBACK=1`:
+   `<script src="/feedback/gcf.js" data-projekt="Name" defer></script>`, optional
+   `data-datensparsam` und `data-hinweis="…"`. Ohne `?` in der Navigation erscheint der Stift.
+3. **Route** unter `/api/feedback/*`: in Next wie immer `feedbackRoute()`; ohne Next
+   `feedbackNodeHandler(optionen)` aus `@growcore/feedback/node` (Express oder `@vercel/node`).
+   Gemeinsame Passwortsperre statt Konten: `identitaet: (r) => sitzungOk(r) ? besucherAutor(r) : null`.
+
+Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/status`.
+
 ## Änderungen
 
+- **v0.8.0** (2026-10-01): **Eigenständige Fassung** `standalone/gcf.js` (276 KB, gepackt 85 KB, im Repo, kein Build beim Einbau) und `@growcore/feedback/node` mit `feedbackNodeHandler`, `standaloneSkript`, `besucherAutor`. Konstanten ohne zod in `core/konstanten.ts` (Browser-Teil ohne zod). Für Next-Projekte ändert sich nichts.
 - **v0.7.0** (2026-10-01): **Zentraler Schalter je Projekt.** Die App fragt `GET /api/feedback/status` (neu in `feedbackRoute`); nur bei `{ an: true }` erscheinen `?`, Leiste und KI-Hilfe, sonst nichts — auch bei einem Fehler. Die Route fragt dafür `speicher.status()` (neu, optional, 30 s gemerkt); ist der Schalter aus, antwortet jeder andere Pfad 404. Der Standard-Speicher fragt die Sammelstelle (`/api/feedback/status` mit dem Schlüssel); kennt die Sammelstelle den Pfad nicht (404, ältere Fassung), gilt „an“. Ein eigener Speicher ohne `status()` ist immer „an“. Geschaltet wird im Projektraum auf `/feedback` bzw. in der Sammelstelle des Projekts. `FEEDBACK=1` bleibt die Voraussetzung: ohne ihn lädt die App kein Werkzeug und fragt auch nicht.
 - **v0.6.0** (2026-10-01): Nach dem Speichern eines Kommentars oder Kreises springt die Leiste auf „Ansehen“ zurück. Die Leiste ist über ihren Griff (⋮⋮ links) verschiebbar, auch per Pfeiltasten; Doppelklick legt sie zurück nach unten in die Mitte. Zettel an Kreisen und das Kommentarfenster lassen sich ziehen (Fenster an der Kopfzeile), höchstens 220 px um ihre Marke, mit gestrichelter Linie zurück zur Stelle; Doppelklick auf den Griff im Fenster legt es zurück. Antworten sind an der Marke zu sehen (Punkt am Pin, „↳ Antwort von GrowCore“ am Zettel). Neue localStorage-Schlüssel `gcf-leiste-lage` und `gcf-versatz:<projekt>`, keine Änderung an API oder Speicher.
 - **v0.5.0** (2026-09-29): Leiste zu = alles weg. Ist die Leiste über das `?` geschlossen, zeigt die Seite keine Punkte, keine Kreise und kein offenes Fenster mehr (vorher blieben sie sichtbar). Die Zahl am `?` zählt weiter. Neu `modus.autorName`: Name aus dem Konto fest im Feld.

@@ -73,6 +73,15 @@ function zuBrowser(zeile: Zeile, ref: string | null): Anmerkung {
   };
 }
 
+/**
+ * Der Autor aus den Kopfzeilen des Overlays (Kennung + Name aus dem Browser).
+ * Exportiert (0.8.0) für Projekte mit gemeinsamer Sperre statt Konten: deren
+ * `identitaet` prüft erst die Sitzung und gibt dann diesen Autor zurück.
+ */
+export function besucherAutor(request: Request): Autor | null {
+  return autorAus(request);
+}
+
 function autorAus(request: Request): Autor | null {
   const ref = request.headers.get("x-gcf-autor");
   let name = "Gast";

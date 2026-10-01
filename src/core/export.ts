@@ -1,5 +1,6 @@
 /** Anmerkungen als Markdown — die Arbeitsliste nach einem Durchgang. */
-import { ART_LABEL, type Anmerkung } from "./typen.ts";
+import { ART_LABEL } from "./konstanten.ts";
+import type { Anmerkung } from "./typen.ts";
 
 function datum(iso: string): string {
   return new Date(iso).toLocaleString("de-DE", {

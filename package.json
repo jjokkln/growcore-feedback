@@ -1,6 +1,6 @@
 {
   "name": "@growcore/feedback",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Feedback-Werkzeug für GrowCore-Projekte in Entwicklung: Anmerkungen in beide Richtungen (Kommentar, Einkreisen, Antworten) und KI-Hilfe. Alles landet im zentralen Eingang des Projektraums.",
   "license": "UNLICENSED",
   "private": true,
@@ -21,17 +21,24 @@
       "types": "./dist/next/index.d.ts",
       "default": "./dist/next/index.js"
     },
-    "./styles.css": "./src/styles/feedback.css"
+    "./styles.css": "./src/styles/feedback.css",
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
+    },
+    "./standalone/gcf.js": "./standalone/gcf.js"
   },
   "files": [
     "dist",
-    "src/styles"
+    "src/styles",
+    "standalone"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/standalone.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/*.test.ts",
-    "prepare": "tsc -p tsconfig.json || true"
+    "prepare": "tsc -p tsconfig.json || true",
+    "standalone": "node scripts/standalone.mjs"
   },
   "dependencies": {
     "zod": "^4.1.0"
@@ -40,6 +47,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "esbuild": "^0.25.12",
     "next": "^16.3.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

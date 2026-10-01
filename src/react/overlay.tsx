@@ -18,16 +18,9 @@ import {
   zuDokumentAnteil,
 } from "../core/anker.ts";
 import { alsMarkdown } from "../core/export.ts";
-import {
-  ART_LABEL,
-  FARBNAME,
-  FARBWERT,
-  KUNDEN_FARBEN,
-  type Anmerkung,
-  type KundenFarbe,
-  type NeueAnmerkung,
-  type Punkt,
-} from "../core/typen.ts";
+import { ART_LABEL, FARBNAME, FARBWERT, KUNDEN_FARBEN, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
+// Nur Typen: zod bleibt aus dem Browser-Bündel.
+import type { Anmerkung, NeueAnmerkung } from "../core/typen.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
 import { offeneMelden, useEinstieg, useLeisteOffen, useWerkzeugAn } from "./einstieg.ts";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
