@@ -74,3 +74,14 @@ export const Haken = ({ size }: P) => (
     <path d="M20 6L9 17l-5-5" />
   </svg>
 );
+/** Griff zum Verschieben: sechs Punkte, wie überall. */
+export const Griff = ({ size }: P) => (
+  <svg {...basis(size)} fill="currentColor" stroke="none">
+    <circle cx="9" cy="6" r="1.6" />
+    <circle cx="15" cy="6" r="1.6" />
+    <circle cx="9" cy="12" r="1.6" />
+    <circle cx="15" cy="12" r="1.6" />
+    <circle cx="9" cy="18" r="1.6" />
+    <circle cx="15" cy="18" r="1.6" />
+  </svg>
+);

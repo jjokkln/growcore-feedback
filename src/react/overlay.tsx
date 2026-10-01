@@ -31,7 +31,15 @@ import {
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
 import { offeneMelden, useEinstieg, useLeisteOffen } from "./einstieg.ts";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
-import { Haken, Runter, Stift } from "./icons.tsx";
+import { Griff, Haken, Runter, Stift } from "./icons.tsx";
+import {
+  begrenzen,
+  pfeilVersatz,
+  rahmenVon,
+  ziehenStarten,
+  type Rahmen,
+  type Versatz,
+} from "./ziehen.ts";
 
 /**
  * Das Anmerkungs-Overlay: irgendwohin klicken → Kommentar, oder einkreisen.
@@ -46,6 +54,11 @@ import { Haken, Runter, Stift } from "./icons.tsx";
  *    Design anpassen kann. Die vier Markenfarben bleiben fest.
  * 4. **Anmerkungen von GrowCore** stehen blau mit ihrer Art darüber; ohne
  *    gefundenen Anker nur in der Liste, „Stelle nicht gefunden".
+ *
+ * 5. **Verschiebbar** (0.6.0): die Leiste über ihren Griff, Zettel und
+ *    Kommentarfenster per Zug — höchstens `RADIUS` um ihre Marke, mit einer
+ *    Linie zurück zur Stelle. Gemerkt je Browser (localStorage), nicht im
+ *    Eingang: Wo ein Fenster liegt, ist eine Ansichtsfrage, keine Anmerkung.
  *
  * ⚠️ WARUM DIE POSITIONEN IMPERATIV GESETZT WERDEN (und nicht über State):
  * Die Marken hängen an Elementen der Seite, ihre Bildschirmposition ändert
@@ -165,6 +178,25 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   const [zeichnetGerade, setZeichnetGerade] = useState(false);
   const liveZugRef = useRef<SVGPathElement | null>(null);
 
+  /**
+   * Wohin jemand Zettel und Fenster gezogen hat, je Anmerkung, ab dem
+   * Absetzpunkt gemessen. Der Ref ist die Wahrheit für die rAF-Schleife
+   * (während eines Zuges ändert sich nur er), der Speicher bekommt das
+   * Ergebnis erst beim Loslassen.
+   */
+  const [versaetze, setVersaetze] = useLocalStorageState<Record<string, Versatz>>(
+    `gcf-versatz:${projekt}`,
+    {},
+  );
+  const versatzRef = useRef<Record<string, Versatz>>(versaetze);
+  useEffect(() => {
+    versatzRef.current = versaetze;
+  }, [versaetze]);
+  /** Linien von der Marke zum verschobenen Zettel oder Fenster. */
+  const linienRef = useRef(new Map<string, SVGLineElement>());
+  /** Größe der Zettel aus dem letzten Bild — für den Radius, ohne neu zu messen. */
+  const zettelGroesseRef = useRef(new Map<string, { w: number; h: number }>());
+
   const markenRef = useRef(new Map<string, HTMLElement | SVGGElement>());
   /** Die Zettel an den eingekreisten Bereichen: Der Kommentar steht am Kringel. */
   const zettelRef = useRef(new Map<string, HTMLElement>());
@@ -232,6 +264,12 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     };
 
     const setzen = () => {
+      const offenId = offenRef.current;
+      const fenster = document.querySelector<HTMLElement>("[data-anmerkung-fenster]");
+      // Erst alle Positionen schreiben, dann die Linien messen: so kostet
+      // ein Bild genau ein Layout, nicht eins je Zettel.
+      const linien: { id: string; p: Versatz; ziel: HTMLElement | null }[] = [];
+
       for (const notiz of notizenRef.current) {
         const knoten = markenRef.current.get(notiz.id);
         if (!knoten) continue;
@@ -242,9 +280,13 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
           // Kein Anker, kein Notnagel: nur in der Liste.
           verstecke(knoten);
           if (zettel) verstecke(zettel);
+          linien.push({ id: notiz.id, p: { x: 0, y: 0 }, ziel: null });
           continue;
         }
         const { punkte, verankert } = lage;
+        const absetz = punkte[punkte.length - 1];
+        const ziel = offenId === notiz.id ? fenster : (zettel ?? null);
+        linien.push({ id: notiz.id, p: absetz, ziel });
 
         if (notiz.shape === "pin") {
           const p = punkte[0];
@@ -263,9 +305,14 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
           }
           g.dataset.lose = verankert ? "nein" : "ja";
 
-          // Der Zettel sitzt am Absetzpunkt des Zuges — dort schaut man hin.
+          // Der Zettel sitzt am Absetzpunkt des Zuges — dort schaut man hin —,
+          // oder dort, wohin ihn jemand gezogen hat, im Radius um den Kreis.
           if (zettel) {
-            const p = punkte[punkte.length - 1];
+            const v = versatzRef.current[notiz.id];
+            const d = v
+              ? begrenzen(absetz, v, rahmenVon(punkte), zettelGroesseRef.current.get(notiz.id))
+              : { x: 0, y: 0 };
+            const p = { x: absetz.x + d.x, y: absetz.y + d.y };
             const drin = p.y > -60 && p.y < window.innerHeight + 60;
             zettel.style.transform = `translate3d(${Math.round(p.x)}px, ${Math.round(p.y)}px, 0)`;
             zettel.style.opacity = drin ? "1" : "0";
@@ -275,13 +322,19 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       }
 
       // Das offene Fenster folgt seiner Marke. Am Rand kippt es nach innen.
-      const offenId = offenRef.current;
-      const fenster = document.querySelector<HTMLElement>("[data-anmerkung-fenster]");
+      // Verschoben liegt seine Ecke dort, wo auch der Zettel läge.
       if (offenId && fenster) {
         const notiz = notizenRef.current.find((n) => n.id === offenId);
         const lage = notiz ? aktuellePunkte(notiz) : null;
         const box = fenster.getBoundingClientRect();
-        if (lage) {
+        const v = notiz ? versatzRef.current[notiz.id] : undefined;
+        if (lage && v) {
+          const p = lage.punkte[lage.punkte.length - 1];
+          const d = begrenzen(p, v, rahmenVon(lage.punkte), { w: box.width, h: box.height });
+          const x = Math.min(Math.max(p.x + d.x + 6, 12), Math.max(12, window.innerWidth - box.width - 12));
+          const y = Math.min(Math.max(p.y + d.y + 6, 12), Math.max(12, window.innerHeight - box.height - 12));
+          fenster.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+        } else if (lage) {
           const p = lage.punkte[lage.punkte.length - 1];
           const x = Math.min(Math.max(p.x - 24, 12), Math.max(12, window.innerWidth - box.width - 12));
           const untenPlatz = p.y + 24 + box.height <= window.innerHeight - 12;
@@ -303,6 +356,30 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
           fallback: roh.zug.fallback,
         });
         if (lage) entwurfPfadRef.current.setAttribute("d", alsPfad(lage.punkte));
+      }
+
+      // Die Linie hält die Zuordnung, sobald ein Zettel oder Fenster nicht
+      // mehr an seiner Marke klebt: vom Absetzpunkt zum nächsten Rand.
+      for (const { id: notizId, p, ziel } of linien) {
+        const linie = linienRef.current.get(notizId);
+        if (!linie) continue;
+        const box = ziel && ziel.style.opacity !== "0" ? ziel.getBoundingClientRect() : null;
+        if (!box || box.width === 0) {
+          linie.style.opacity = "0";
+          continue;
+        }
+        if (ziel !== fenster) zettelGroesseRef.current.set(notizId, { w: box.width, h: box.height });
+        const nah = {
+          x: Math.min(Math.max(p.x, box.left), box.right),
+          y: Math.min(Math.max(p.y, box.top), box.bottom),
+        };
+        const weit = Math.hypot(nah.x - p.x, nah.y - p.y) > 28;
+        linie.style.opacity = weit ? "1" : "0";
+        if (!weit) continue;
+        linie.setAttribute("x1", String(Math.round(p.x)));
+        linie.setAttribute("y1", String(Math.round(p.y)));
+        linie.setAttribute("x2", String(Math.round(nah.x)));
+        linie.setAttribute("y2", String(Math.round(nah.y)));
       }
 
       id = requestAnimationFrame(setzen);
@@ -397,6 +474,16 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     });
   };
 
+  /**
+   * Nach dem Speichern zurück auf „Ansehen" (Lenny, 2026-10-01): Wer eine
+   * Anmerkung gesetzt hat, will danach meist wieder klicken und lesen —
+   * und nicht aus Versehen gleich die nächste setzen.
+   */
+  const fertig = () => {
+    setEntwurf(null);
+    setModus("ansehen");
+  };
+
   const entwurfAbschicken = async (text: string, name: string) => {
     if (!entwurf) return;
     if (!einstellung.ohneName) nameMerken(name);
@@ -418,7 +505,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
         points: entwurf.zug.points,
         fallback: entwurf.zug.fallback,
       });
-      if (ok) setEntwurf(null);
+      if (ok) fertig();
       return;
     }
 
@@ -430,7 +517,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       points: [box ? zuAnkerAnteil(entwurf.x, entwurf.y, box) : { x: 0, y: 0 }],
       fallback: [zuDokumentAnteil(entwurf.x, entwurf.y)],
     });
-    if (ok) setEntwurf(null);
+    if (ok) fertig();
   };
 
   // ── Freihand ─────────────────────────────────────────────────────────────
@@ -466,6 +553,89 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     const { anchor_selector, anchor_label, points, fallback } = verankere(zug);
     setEntwurf({ x: ende.x, y: ende.y, anchor_selector, anchor_label, zug: { points, fallback } });
   };
+
+  // ── Verschieben ──────────────────────────────────────────────────────────
+
+  /** Absetzpunkt und Umriss einer Marke jetzt gerade, oder `null` ohne Stelle. */
+  const markeVon = (n: Anmerkung): { p: Versatz; rahmen: Rahmen } | null => {
+    const lage = aktuellePunkte(n);
+    if (!lage) return null;
+    return { p: lage.punkte[lage.punkte.length - 1], rahmen: rahmenVon(lage.punkte) };
+  };
+
+  /**
+   * Der Versatz, der gerade gilt. Für ein offenes Fenster ohne eigenen
+   * Versatz ist es seine Lage am Bildschirm — sonst spränge es beim ersten
+   * Zug an den Zettelplatz.
+   */
+  /** Das Element, das gerade für die Anmerkung steht: offenes Fenster oder Zettel. */
+  const fensterOderZettel = (n: Anmerkung): HTMLElement | null =>
+    offen === n.id
+      ? document.querySelector<HTMLElement>("[data-anmerkung-fenster]")
+      : (zettelRef.current.get(n.id) ?? null);
+
+  const groesseVon = (n: Anmerkung) => {
+    const box = fensterOderZettel(n)?.getBoundingClientRect();
+    return box ? { w: box.width, h: box.height } : undefined;
+  };
+
+  const versatzJetzt = (n: Anmerkung, p: Versatz, rahmen: Rahmen): Versatz => {
+    const v = versatzRef.current[n.id];
+    if (v) return begrenzen(p, v, rahmen, groesseVon(n));
+    const fenster = offen === n.id ? fensterOderZettel(n) : null;
+    if (fenster) {
+      const box = fenster.getBoundingClientRect();
+      return begrenzen(p, { x: box.left - 6 - p.x, y: box.top - 6 - p.y }, rahmen, groesseVon(n));
+    }
+    return { x: 0, y: 0 };
+  };
+
+  /** Ins Gedächtnis schreiben, und dabei Versätze gelöschter Anmerkungen wegräumen. */
+  const versatzMerken = (id: string, v: Versatz | null) => {
+    const ids = new Set(alle.map((n) => n.id));
+    const neu: Record<string, Versatz> = {};
+    for (const [k, w] of Object.entries(versatzRef.current)) if (ids.has(k)) neu[k] = w;
+    if (v) neu[id] = v;
+    else delete neu[id];
+    versatzRef.current = neu;
+    setVersaetze(neu);
+  };
+
+  /** Ein Zug an Zettel oder Fenster. Gibt `true` zurück, wenn wirklich gezogen wurde. */
+  const verschieben = (n: Anmerkung, e: React.PointerEvent, nachher?: (bewegt: boolean) => void) => {
+    const marke = markeVon(n);
+    if (!marke) return;
+    const start = versatzJetzt(n, marke.p, marke.rahmen);
+    ziehenStarten(e, {
+      beiZug: (d) => {
+        versatzRef.current = { ...versatzRef.current, [n.id]: { x: start.x + d.x, y: start.y + d.y } };
+      },
+      beiEnde: (d, bewegt) => {
+        if (bewegt) {
+          const jetzt = markeVon(n) ?? marke;
+          versatzMerken(
+            n.id,
+            begrenzen(jetzt.p, { x: start.x + d.x, y: start.y + d.y }, jetzt.rahmen, groesseVon(n)),
+          );
+        }
+        nachher?.(bewegt);
+      },
+    });
+  };
+
+  /** Pfeiltasten am Griff des Fensters — Verschieben ohne Maus. */
+  const verschiebenPerTaste = (n: Anmerkung, d: Versatz) => {
+    const marke = markeVon(n);
+    if (!marke) return;
+    const start = versatzJetzt(n, marke.p, marke.rahmen);
+    versatzMerken(
+      n.id,
+      begrenzen(marke.p, { x: start.x + d.x, y: start.y + d.y }, marke.rahmen, groesseVon(n)),
+    );
+  };
+
+  /** Nach einem Zug am Zettel kommt ein `click` — der soll ihn nicht öffnen. */
+  const geradeGezogenRef = useRef(false);
 
   // ── Ändern ───────────────────────────────────────────────────────────────
   const mitMeldung = async (aufruf: Promise<{ ok: true } | { ok: false; fehler: string }>) => {
@@ -562,6 +732,20 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               />
             </g>
           ))}
+          {sichtbare.map((n) => (
+            <line
+              key={`linie-${n.id}`}
+              ref={(el) => {
+                if (el) linienRef.current.set(n.id, el);
+                else linienRef.current.delete(n.id);
+              }}
+              stroke={FARBWERT[n.color]}
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              strokeOpacity={n.done ? 0.4 : 0.85}
+              style={{ opacity: 0 }}
+            />
+          ))}
           {entwurf?.zug && (
             <path
               ref={entwurfPfadRef}
@@ -594,11 +778,25 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               if (el) zettelRef.current.set(n.id, el);
               else zettelRef.current.delete(n.id);
             }}
+            onPointerDown={(e) => {
+              // Sonst beginnt im Einkreisen-Modus ein Strich unter dem Zettel.
+              e.stopPropagation();
+              verschieben(n, e, (bewegt) => {
+                geradeGezogenRef.current = bewegt;
+              });
+            }}
             onClick={(e) => {
               e.stopPropagation();
+              if (geradeGezogenRef.current) {
+                geradeGezogenRef.current = false;
+                return;
+              }
               setOffen(offen === n.id ? null : n.id);
             }}
-            aria-label={`${wer(n)}, eingekreist: ${n.body ?? "ohne Text"}${n.done ? ", erledigt" : ""}`}
+            title="Klicken zum Öffnen, ziehen zum Verschieben"
+            aria-label={`${wer(n)}, eingekreist: ${n.body ?? "ohne Text"}${n.done ? ", erledigt" : ""}${
+              n.replies.length ? `, ${n.replies.length} Antwort${n.replies.length === 1 ? "" : "en"}` : ""
+            }`}
             style={{
               position: "absolute",
               top: 0,
@@ -615,7 +813,8 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               color: T.text,
               font: `400 12px/1.35 ${T.schrift}`,
               boxShadow: "0 2px 10px rgba(0,0,0,.18)",
-              cursor: "pointer",
+              cursor: "grab",
+              touchAction: "none",
               display: offen === n.id ? "none" : "-webkit-box",
               WebkitLineClamp: 3,
               WebkitBoxOrient: "vertical",
@@ -630,6 +829,11 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               <strong style={{ fontWeight: 600 }}>{ART_LABEL[n.kind]}: </strong>
             )}
             {n.body ?? "✎ ohne Text"}
+            {n.replies.some((a) => a.from_agency) && !n.from_agency && (
+              <span style={{ display: "block", marginTop: 3, color: T.leise, fontWeight: 600 }}>
+                ↳ Antwort von GrowCore
+              </span>
+            )}
           </button>
         ))}
 
@@ -645,7 +849,9 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               e.stopPropagation();
               setOffen(offen === n.id ? null : n.id);
             }}
-            aria-label={`${wer(n)} ${nummerVon(n)}${n.done ? ", erledigt" : ""}: ${n.body ?? ""}`}
+            aria-label={`${wer(n)} ${nummerVon(n)}${n.done ? ", erledigt" : ""}${
+              n.replies.length ? `, ${n.replies.length} Antwort${n.replies.length === 1 ? "" : "en"}` : ""
+            }: ${n.body ?? ""}`}
             title={n.body ?? undefined}
             style={{
               position: "absolute",
@@ -667,6 +873,22 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
             }}
           >
             {nummerVon(n)}
+            {/* Ein Punkt am Rand: Hier hat jemand geantwortet. */}
+            {n.replies.length > 0 && (
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  top: -4,
+                  right: -4,
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background: T.primaer,
+                  border: "2px solid #fff",
+                }}
+              />
+            )}
           </button>
         ))}
       </aside>
@@ -693,6 +915,9 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
             if (await mitMeldung(feedbackApi.loeschen(offeneNotiz.id))) setOffen(null);
           }}
           onAntworten={(text) => mitMeldung(feedbackApi.antworten(offeneNotiz.id, text))}
+          onZiehen={(e) => verschieben(offeneNotiz, e)}
+          onPfeil={(d) => verschiebenPerTaste(offeneNotiz, d)}
+          onZurueck={() => versatzMerken(offeneNotiz.id, null)}
         />
       )}
 
@@ -797,6 +1022,65 @@ function Leiste(props: {
   const eingeklappt = !offen;
   const { knoepfe } = useEinstieg();
 
+  // Verschiebbar (Lenny, 2026-10-01): Die Leiste liegt sonst unten in der
+  // Mitte — genau dort, wo auf vielen Seiten der Inhalt steht, um den es
+  // geht. `null` = Standardplatz; gemerkt je Browser, für alle Seiten.
+  const [lage, setLage] = useLocalStorageState<Versatz | null>("gcf-leiste-lage", null);
+  const leisteRef = useRef<HTMLElement>(null);
+  const [, neuZeichnen] = useState(0);
+  useEffect(() => {
+    // Wird das Fenster kleiner, rückt die Leiste mit, statt herauszufallen.
+    const beiGroesse = () => neuZeichnen((n) => n + 1);
+    window.addEventListener("resize", beiGroesse);
+    return () => window.removeEventListener("resize", beiGroesse);
+  }, []);
+
+  /** Hält die Leiste ganz im Fenster. */
+  const einpassen = (v: Versatz): Versatz => {
+    const box = leisteRef.current?.getBoundingClientRect();
+    const breite = box?.width ?? 320;
+    const hoehe = box?.height ?? 56;
+    return {
+      x: Math.round(Math.min(Math.max(v.x, 8), Math.max(8, window.innerWidth - breite - 8))),
+      y: Math.round(Math.min(Math.max(v.y, 8), Math.max(8, window.innerHeight - hoehe - 8))),
+    };
+  };
+
+  const ziehen = (e: React.PointerEvent) => {
+    const el = leisteRef.current;
+    if (!el) return;
+    e.preventDefault();
+    const box = el.getBoundingClientRect();
+    const start = { x: box.left, y: box.top };
+    // Während des Zuges direkt am Element, gespeichert wird beim Loslassen —
+    // ein Speicher-Schreibvorgang je Mausbewegung wäre zäh.
+    ziehenStarten(e, {
+      beiZug: (d) => {
+        const v = einpassen({ x: start.x + d.x, y: start.y + d.y });
+        el.style.left = `${v.x}px`;
+        el.style.top = `${v.y}px`;
+        el.style.bottom = "auto";
+        el.style.transform = "none";
+      },
+      beiEnde: (d, bewegt) => {
+        if (bewegt) setLage(einpassen({ x: start.x + d.x, y: start.y + d.y }));
+      },
+    });
+  };
+
+  const perTaste = (d: Versatz) => {
+    const box = leisteRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setLage(einpassen({ x: box.left + d.x, y: box.top + d.y }));
+  };
+
+  const platz: React.CSSProperties = lage
+    ? (() => {
+        const v = einpassen(lage);
+        return { left: v.x, top: v.y, bottom: "auto", transform: "none" };
+      })()
+    : { bottom: 16, left: "50%", transform: "translateX(-50%)" };
+
   // Die KI-Hilfe rückt auf dem Handy nach unten, sobald die Leiste nur noch
   // ein Stift ist (styles.css). Ein Attribut statt geteiltem State: Die beiden
   // Teile des Werkzeugs sind getrennt eingebunden.
@@ -846,15 +1130,15 @@ function Leiste(props: {
   // ⚠️ Landmark AUSSEN, Werkzeugleiste INNEN (Katalognote, Entscheidung 4).
   return (
     <aside
+      ref={leisteRef}
       {...{ [OVERLAY_ATTR]: "" }}
       aria-label="Anmerkungen"
       // Ab 768 px bleibt rechts Platz für den Knopf der KI-Hilfe (styles.css).
       className="gcf-leiste"
+      data-verschoben={lage ? "" : undefined}
       style={{
         position: "fixed",
-        bottom: 16,
-        left: "50%",
-        transform: "translateX(-50%)",
+        ...platz,
         zIndex: EBENE + 2,
         minWidth: 0,
       }}
@@ -875,6 +1159,23 @@ function Leiste(props: {
           boxShadow: "0 6px 24px rgba(0,0,0,.18)",
         }}
       >
+        <button
+          type="button"
+          className="gcf-griff"
+          onPointerDown={ziehen}
+          onKeyDown={(e) => {
+            const d = pfeilVersatz(e);
+            if (!d) return;
+            e.preventDefault();
+            perTaste(d);
+          }}
+          onDoubleClick={() => setLage(null)}
+          aria-label="Leiste verschieben (Pfeiltasten), Doppelklick legt sie zurück nach unten in die Mitte"
+          title="Ziehen zum Verschieben · Doppelklick: zurück nach unten"
+        >
+          <Griff size={16} />
+        </button>
+
         <div role="radiogroup" aria-label="Werkzeug" style={{ display: "flex", gap: 4 }}>
           {modi.map((m) => (
             <button
@@ -1120,6 +1421,9 @@ function NotizFenster(props: {
   onAbhaken: () => void;
   onLoeschen: () => void;
   onAntworten: (text: string) => Promise<boolean>;
+  onZiehen: (e: React.PointerEvent) => void;
+  onPfeil: (d: Versatz) => void;
+  onZurueck: () => void;
 }) {
   const { notiz } = props;
   const [entwurf, setEntwurf] = useState("");
@@ -1153,8 +1457,41 @@ function NotizFenster(props: {
         boxShadow: "0 8px 30px rgba(0,0,0,.2)",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-        <p style={{ ...kleinStil, fontWeight: 600 }}>
+      {/* Die Kopfzeile ist der Griff: dort ziehen verschiebt das Fenster. */}
+      <div
+        onPointerDown={(e) => {
+          if ((e.target as Element).closest("button:not([data-griff])")) return;
+          e.preventDefault();
+          props.onZiehen(e);
+        }}
+        style={{ display: "flex", justifyContent: "space-between", gap: 8, cursor: "grab", touchAction: "none" }}
+      >
+        <button
+          type="button"
+          data-griff=""
+          aria-label="Fenster verschieben (Pfeiltasten), Doppelklick legt es zurück an die Stelle"
+          title="Ziehen zum Verschieben · Doppelklick: zurück an die Stelle"
+          onKeyDown={(e) => {
+            const d = pfeilVersatz(e);
+            if (!d) return;
+            e.preventDefault();
+            props.onPfeil(d);
+          }}
+          onDoubleClick={props.onZurueck}
+          style={{
+            ...knopfStil,
+            border: "none",
+            background: "transparent",
+            padding: 2,
+            margin: "-2px -4px 0 -6px",
+            color: T.leise,
+            cursor: "grab",
+            alignSelf: "flex-start",
+          }}
+        >
+          <Griff size={14} />
+        </button>
+        <p style={{ ...kleinStil, fontWeight: 600, flex: 1 }}>
           <span style={{ color: notiz.from_agency ? T.text : T.leise }}>
             {wer(notiz)}
           </span>{" "}

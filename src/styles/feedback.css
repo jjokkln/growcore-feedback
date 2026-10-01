@@ -592,3 +592,35 @@
       0 0 0 9999px rgba(0, 0, 0, 0.18);
   }
 }
+
+/* Griff der Leiste (0.6.0). Ziehen verschiebt sie, Pfeiltasten auch. */
+.gcf-griff {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 30px;
+  margin-right: -2px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gcf-leise);
+  cursor: grab;
+  touch-action: none;
+}
+.gcf-griff:hover {
+  background: var(--gcf-muted);
+  color: var(--gcf-text);
+}
+.gcf-griff:active {
+  cursor: grabbing;
+}
+.gcf-griff:focus-visible {
+  outline: 2px solid var(--gcf-primaer);
+  outline-offset: 2px;
+}
+/* Verschoben gilt die eigene Lage, nicht mehr die halbe Breite für die KI-Hilfe. */
+.gcf-leiste[data-verschoben] {
+  max-width: calc(100vw - 16px);
+}

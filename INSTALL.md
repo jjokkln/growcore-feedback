@@ -218,6 +218,7 @@ export const { GET, POST, PATCH, DELETE } = feedbackRoute({
 
 ## Änderungen
 
+- **v0.6.0** (2026-10-01): Nach dem Speichern eines Kommentars oder Kreises springt die Leiste auf „Ansehen“ zurück. Die Leiste ist über ihren Griff (⋮⋮ links) verschiebbar, auch per Pfeiltasten; Doppelklick legt sie zurück nach unten in die Mitte. Zettel an Kreisen und das Kommentarfenster lassen sich ziehen (Fenster an der Kopfzeile), höchstens 220 px um ihre Marke, mit gestrichelter Linie zurück zur Stelle; Doppelklick auf den Griff im Fenster legt es zurück. Antworten sind an der Marke zu sehen (Punkt am Pin, „↳ Antwort von GrowCore“ am Zettel). Neue localStorage-Schlüssel `gcf-leiste-lage` und `gcf-versatz:<projekt>`, keine Änderung an API oder Speicher.
 - **v0.5.0** (2026-09-29): Leiste zu = alles weg. Ist die Leiste über das `?` geschlossen, zeigt die Seite keine Punkte, keine Kreise und kein offenes Fenster mehr (vorher blieben sie sichtbar). Die Zahl am `?` zählt weiter. Neu `modus.autorName`: Name aus dem Konto fest im Feld.
 - **v0.4.0** (2026-09-29): Eigener Speicher (`speicher`) und Identität aus der Sitzung (`identitaet`) für Projekte mit Personendaten; `modus` (`datensparsam`, `ohneName`, `hinweis`). Ohne diese Optionen verhält sich alles wie in v0.3.0.
 - **v0.3.0** (2026-09-28): Der Einstieg ist ein `?` in der Navigation
