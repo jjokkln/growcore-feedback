@@ -1,5 +1,5 @@
 import type { Anmerkung, Antwort, Autor, NeueAnmerkung } from "../core/typen.ts";
-import { eingang, eingangStatus } from "./eingang.ts";
+import { eingang, eingangPersonen, eingangStatus } from "./eingang.ts";
 
 /** Eine Anmerkung samt Kennung des Autors, wie der Server sie kennt. Die Kennung geht nie zum Browser. */
 export type Zeile = Omit<Anmerkung, "eigen" | "replies"> & {
@@ -35,6 +35,11 @@ export interface FeedbackSpeicher {
    * Funktion gilt „an" — dann entscheidet allein `FEEDBACK=1`.
    */
   status?(): Promise<boolean>;
+  /**
+   * Optional (0.9.0): Wer darf sich als Autor auswählen? Anzeigenamen, gepflegt bei der
+   * Sammelstelle. Leer oder ohne diese Funktion bleibt es beim freien Namensfeld.
+   */
+  personen?(): Promise<string[]>;
 }
 
 /** Der Standard: alles über den Projektschlüssel an den Eingang im Projektraum. */
@@ -56,4 +61,5 @@ export const eingangsSpeicher: FeedbackSpeicher = {
     await eingang("/ki-fragen", { method: "POST", body: { question: frage.slice(0, 2000), path: seite } });
   },
   status: eingangStatus,
+  personen: eingangPersonen,
 };

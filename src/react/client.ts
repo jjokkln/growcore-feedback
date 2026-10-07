@@ -71,4 +71,10 @@ export const feedbackApi = {
   erledigt: (id: string, done: boolean) =>
     rufe<{ ok: true }>(`/anmerkungen/${id}`, { method: "PATCH", body: JSON.stringify({ done }) }),
   loeschen: (id: string) => rufe<{ ok: true }>(`/anmerkungen/${id}`, { method: "DELETE", body: "{}" }),
+  /** 0.9.0. Ältere Server kennen den Pfad nicht: dann `[]` und das freie Namensfeld. */
+  personen: async (): Promise<string[]> => {
+    const antwort = await rufe<{ personen?: unknown }>("/personen");
+    if (!antwort.ok || !Array.isArray(antwort.daten.personen)) return [];
+    return antwort.daten.personen.filter((p): p is string => typeof p === "string" && p.trim().length > 0);
+  },
 };

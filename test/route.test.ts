@@ -222,3 +222,37 @@ test("ohne FEEDBACK=1 gibt es auch /status nicht", async () => {
   assert.equal((await feedbackRoute().GET(anfrage("/status", { ref: null }))).status, 404);
   assert.equal(statusAufrufe, 0);
 });
+
+test("Personenliste (0.9.0): vom Eingang geprüft durchgereicht, Fremdes und Altes ergibt []", async () => {
+  antwortVomEingang = () => Response.json({ personen: ["Hildegard", "Nadine"] });
+  const route = feedbackRoute();
+  assert.deepEqual(await (await route.GET(anfrage("/personen"))).json(), { personen: ["Hildegard", "Nadine"] });
+  assert.ok(aufrufe[0]?.url.endsWith("/api/feedback/personen"));
+
+  // Eine Sammelstelle ohne den Pfad (404) oder mit Unsinn: freies Namensfeld statt Fehler.
+  antwortVomEingang = () => Response.json({ fehler: "Nicht gefunden." }, { status: 404 });
+  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/personen"))).json(), { personen: [] });
+  antwortVomEingang = () => Response.json({ personen: [42, ""] });
+  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/personen"))).json(), { personen: [] });
+});
+
+test("Personenliste: bei ausgeschaltetem Werkzeug 404, ohne Sitzung 401", async () => {
+  statusVomEingang = () => Response.json({ an: false });
+  assert.equal((await feedbackRoute().GET(anfrage("/personen"))).status, 404);
+  statusVomEingang = () => Response.json({ an: true });
+  const mitKonto = feedbackRoute({ identitaet: async () => null });
+  assert.equal((await mitKonto.GET(anfrage("/personen"))).status, 401);
+});
+
+test("Personenliste: eigener Speicher ohne personen() liefert []", async () => {
+  const route = feedbackRoute({
+    speicher: {
+      liste: async () => [],
+      anlegen: async () => { throw new Error("nicht gebraucht"); },
+      antworten: async () => {},
+      erledigt: async () => {},
+      loeschen: async () => {},
+    },
+  });
+  assert.deepEqual(await (await route.GET(anfrage("/personen"))).json(), { personen: [] });
+});

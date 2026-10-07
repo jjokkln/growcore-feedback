@@ -132,6 +132,16 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     return jetzt;
   };
 
+  // Die Personenliste, ebenso 30 s gemerkt: Das Overlay fragt sie bei jedem Öffnen.
+  let personen: { liste: string[]; bis: number } | null = null;
+  const personenListe = async (): Promise<string[]> => {
+    if (!speicher.personen) return [];
+    if (personen && personen.bis > Date.now()) return personen.liste;
+    const jetzt = await speicher.personen().catch(() => []);
+    personen = { liste: jetzt, bis: Date.now() + 30_000 };
+    return jetzt;
+  };
+
   async function behandle(request: Request, methode: string): Promise<Response> {
     if (!an()) return fehler(404, "Nicht gefunden.");
     const [bereich, id, unter] = segmente(request);
@@ -146,6 +156,8 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
       const autor = await wer(request);
       if (optionen.identitaet && !autor) return fehler(401, "Bitte melde dich an.");
       if (bereich === "anmerkungen") return await anmerkungen(request, methode, id, unter, autor);
+      // Erst nach Schalter und Identität: Die Namen sieht nur, wer das Werkzeug auch benutzen darf.
+      if (bereich === "personen" && methode === "GET" && !id) return json({ personen: await personenListe() });
       if (bereich === "ki-hilfe" && methode === "POST" && !id) return await kiHilfe(request, autor);
       return fehler(404, "Nicht gefunden.");
     } catch (e) {

@@ -98,6 +98,13 @@ export const neueAnmerkungSchema = z
   });
 export type NeueAnmerkung = z.infer<typeof neueAnmerkungSchema>;
 
+/**
+ * Die Personen, die für ein Projekt Anmerkungen setzen (0.9.0). Gepflegt bei der Sammelstelle
+ * (Projektraum `/feedback`, galdora-network `/anmerkungen`); das Overlay zeigt sie als Auswahl
+ * statt des freien Namensfelds. Nur Anzeigenamen, keine Kontaktdaten.
+ */
+export const personenSchema = z.array(z.string().trim().min(1).max(80)).max(50);
+
 export const antwortSchema = z.object({
   body: z.string().trim().min(1, "Eine leere Antwort sagt nichts.").max(4000),
 });

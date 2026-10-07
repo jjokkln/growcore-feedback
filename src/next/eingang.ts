@@ -1,3 +1,5 @@
+import { personenSchema } from "../core/typen.ts";
+
 /**
  * Die Leitung zum Feedback-Eingang im Projektraum (lennys-projekte.de).
  *
@@ -88,5 +90,29 @@ export async function eingangStatus(): Promise<boolean> {
   } catch (e) {
     console.error("[feedback] Eingang nicht erreichbar:", e instanceof Error ? e.message : e);
     return false;
+  }
+}
+
+/**
+ * Die Personenliste des Projekts (0.9.0). Alles außer einer gültigen Liste ergibt `[]`:
+ * Ältere Sammelstellen kennen den Pfad nicht (404), und ohne Liste bleibt es beim freien
+ * Namensfeld — das Werkzeug soll daran nicht scheitern.
+ */
+export async function eingangPersonen(): Promise<string[]> {
+  const schluessel = process.env.GROWCORE_FEEDBACK_KEY?.trim();
+  if (!schluessel) return [];
+  const basis = (process.env.GROWCORE_FEEDBACK_URL?.trim() || STANDARD_URL).replace(/\/$/, "");
+  try {
+    const antwort = await fetch(`${basis}/api/feedback/personen`, {
+      headers: { authorization: `Bearer ${schluessel}` },
+      cache: "no-store",
+    });
+    if (!antwort.ok) return [];
+    const daten = (await antwort.json().catch(() => ({}))) as { personen?: unknown };
+    const geprueft = personenSchema.safeParse(daten.personen);
+    return geprueft.success ? geprueft.data : [];
+  } catch (e) {
+    console.error("[feedback] Eingang nicht erreichbar:", e instanceof Error ? e.message : e);
+    return [];
   }
 }

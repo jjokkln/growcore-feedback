@@ -214,6 +214,21 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   }, [offeneAnzahl]);
   useEffect(() => () => offeneMelden(0), []);
 
+  // Die Personenliste des Projekts (0.9.0), erst wenn jemand die Leiste öffnet: Besucher, die
+  // das Werkzeug nie aufmachen, fragen sie nicht ab. Mit Konto gibt es kein Namensfeld.
+  const mitNamen = !einstellung.ohneName && !einstellung.autorName;
+  const [personen, setPersonen] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!mitNamen || !leisteOffen || personen !== null) return;
+    let aktiv = true;
+    void feedbackApi.personen().then((liste) => {
+      if (aktiv) setPersonen(liste);
+    });
+    return () => {
+      aktiv = false;
+    };
+  }, [mitNamen, leisteOffen, personen]);
+
   // ── Laden ────────────────────────────────────────────────────────────────
   const neuLaden = useCallback(async () => {
     const antwort = await feedbackApi.laden();
@@ -890,6 +905,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       {entwurf && (
         <EntwurfsFeld
           einstellung={einstellung}
+          personen={personen ?? []}
           entwurf={entwurf}
           farbe={farbe}
           laeuft={laeuft}
@@ -1265,9 +1281,13 @@ function Leiste(props: {
   );
 }
 
+/** Wert der Auswahl „Jemand anderes …" — kein Name kann so heißen (Steuerzeichen). */
+const ANDERE = "\u0000andere";
+
 /** Das Textfeld für einen neuen Kommentar, direkt an der geklickten Stelle. */
 function EntwurfsFeld(props: {
   einstellung: OverlayModus;
+  personen: string[];
   entwurf: Entwurf;
   farbe: KundenFarbe;
   laeuft: boolean;
@@ -1276,7 +1296,16 @@ function EntwurfsFeld(props: {
 }) {
   const [text, setText] = useState("");
   const [name, setName] = useState(gespeicherterName);
-  const nameFehlt = !props.einstellung.ohneName && !gespeicherterName();
+  const mitNamen = !props.einstellung.ohneName && !props.einstellung.autorName;
+  // Mit Personenliste (0.9.0) steht die Auswahl immer da, vorbelegt mit dem gemerkten Namen:
+  // An einem geteilten Rechner wechselt so die Person, ohne den Browser-Speicher zu leeren.
+  const mitAuswahl = mitNamen && props.personen.length > 0;
+  // Ohne eigene Wahl: „Jemand anderes", wenn der gemerkte Name nicht in der Liste steht. Abgeleitet
+  // statt beim Öffnen festgelegt, weil die Liste nach dem Feld ankommen kann.
+  const [andereWahl, setAndere] = useState<boolean | null>(null);
+  const andere = andereWahl ?? (Boolean(name.trim()) && !props.personen.includes(name));
+  const auswahl = andere ? ANDERE : props.personen.includes(name) ? name : "";
+  const nameFehlt = mitNamen && !mitAuswahl && !gespeicherterName();
   const feldRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -1287,7 +1316,7 @@ function EntwurfsFeld(props: {
   const breite = 290;
   const links = Math.min(Math.max(props.entwurf.x - 10, 12), window.innerWidth - breite - 12);
   const obenStatt = props.entwurf.y + 240 > window.innerHeight;
-  const darf = Boolean(text.trim() || props.entwurf.zug);
+  const darf = Boolean(text.trim() || props.entwurf.zug) && (!mitAuswahl || Boolean(name.trim()));
 
   return (
     <aside
@@ -1352,10 +1381,46 @@ function EntwurfsFeld(props: {
           Als: <strong style={{ fontWeight: 600 }}>{props.einstellung.autorName}</strong>
         </p>
       )}
-      {nameFehlt && (
+      {mitAuswahl && (
+        <>
+          <label htmlFor="anmerkung-person" style={{ ...kleinStil, display: "block", marginTop: 8, marginBottom: 4 }}>
+            Wer sind Sie?
+          </label>
+          <select
+            id="anmerkung-person"
+            value={auswahl}
+            onChange={(e) => {
+              const wert = e.target.value;
+              setAndere(wert === ANDERE);
+              setName(wert === ANDERE ? "" : wert);
+            }}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              font: `400 13px/1.4 ${T.schrift}`,
+              color: T.text,
+              background: T.grund,
+              padding: "6px 8px",
+              border: `1px solid ${T.kante}`,
+              borderRadius: 6,
+            }}
+          >
+            <option value="" disabled>
+              Bitte auswählen
+            </option>
+            {props.personen.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+            <option value={ANDERE}>Jemand anderes …</option>
+          </select>
+        </>
+      )}
+      {(nameFehlt || (mitAuswahl && andere)) && (
         <input
-          aria-label="Ihr Name (optional)"
-          placeholder="Ihr Name (optional)"
+          aria-label={mitAuswahl ? "Ihr Name" : "Ihr Name (optional)"}
+          placeholder={mitAuswahl ? "Ihr Name" : "Ihr Name (optional)"}
           value={name}
           maxLength={120}
           onChange={(e) => setName(e.target.value)}
