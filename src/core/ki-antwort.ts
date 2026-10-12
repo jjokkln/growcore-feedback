@@ -19,7 +19,11 @@ export interface KiAntwort {
   hinweis: string;
 }
 
-const MARKE = /\s*\[ziel:([a-z0-9-]+)\]/gi;
+// „[ziel:kennung]“ ist das verlangte Format. Gemini lässt das „ziel:“ manchmal weg
+// (Boltwork, 12.10.2026: „[nav-team]“ stand roh im Schritt, ohne „Zeigen“). Eine nackte
+// Klammer gilt deshalb auch als Marke, aber nur mit einer Kennung aus dem Katalog;
+// jeder andere Klammertext bleibt stehen.
+const MARKE = /\s*\[(ziel:)?([a-z0-9-]+)\]/gi;
 const HALBE_MARKE = /\s*\[(?:z(?:i(?:e(?:l(?::[a-z0-9-]*)?)?)?)?)?$/i;
 const SCHRITT = /^\s*(\d{1,2})[.)]\s+(.*)$/;
 const HINWEIS = /^\s*hinweis:\s*/i;
@@ -27,8 +31,9 @@ const HINWEIS = /^\s*hinweis:\s*/i;
 function ohneMarken(text: string, bekannt: (id: string) => boolean): { text: string; ziel: string | null } {
   let ziel: string | null = null;
   const sauber = text
-    .replace(MARKE, (_, id: string) => {
+    .replace(MARKE, (ganz: string, praefix: string | undefined, id: string) => {
       const kennung = id.toLowerCase();
+      if (!praefix && !bekannt(kennung)) return ganz;
       if (!ziel && bekannt(kennung)) ziel = kennung;
       return "";
     })
