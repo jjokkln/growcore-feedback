@@ -65,8 +65,11 @@ export function Fuehrung({
   ziele,
   onZurKiHilfe,
   onLaeuft,
+  anrede = "Sie",
 }: {
   ziele: ZielKatalog;
+  /** „du“ oder „Sie“ (Standard) für die Hinweise auf der Karte (0.10.0). */
+  anrede?: "du" | "Sie";
   onZurKiHilfe: () => void;
   /** Meldet, ob gerade geführt wird — das KI-Fenster schrumpft dann auf dem Handy. */
   onLaeuft?: (laeuft: boolean) => void;
@@ -219,9 +222,9 @@ export function Fuehrung({
         <p className="gcf-karte-text">{schritt.text}</p>
         <p className="gcf-klein">
           {gefunden === "ja"
-            ? "Klicken Sie auf die markierte Stelle."
+            ? anrede === "du" ? "Klick auf die markierte Stelle." : "Klicken Sie auf die markierte Stelle."
             : gefunden === "vorstufe"
-              ? "Öffnen Sie zuerst das Menü (markiert)."
+              ? anrede === "du" ? "Öffne zuerst das Menü (markiert)." : "Öffnen Sie zuerst das Menü (markiert)."
               : ziel
                 ? `Gesucht: ${ziel.name} — auf dieser Seite nicht zu sehen.`
                 : "Dafür gibt es keine feste Stelle zum Markieren."}

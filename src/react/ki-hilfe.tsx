@@ -46,14 +46,27 @@ function normPfad(pfad: string | null): string {
   return pfad.replace(/\/+$/, "") || "/";
 }
 
-export function KiHilfe(props: { projekt: string; ziele: ZielKatalog; vorschlaege: string[] }) {
+type KiHilfeProps = {
+  projekt: string;
+  ziele: ZielKatalog;
+  vorschlaege: string[];
+  /** „du“ oder „Sie“ (Standard) — wie `anrede` in `KiWissen` (0.10.0). */
+  anrede?: "du" | "Sie";
+  /**
+   * Erste Nachricht der KI (0.10.0). Muss sagen, dass hier eine KI antwortet
+   * (Art. 50 KI-VO). Standard ist die Fassung für Websites mit Anmerkungen.
+   */
+  begruessung?: string;
+};
+
+export function KiHilfe(props: KiHilfeProps) {
   const mounted = useMounted();
   const werkzeugAn = useWerkzeugAn();
   if (!mounted || !werkzeugAn) return null;
   return createPortal(<KiHilfeInnen {...props} />, document.body);
 }
 
-function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele: ZielKatalog; vorschlaege: string[] }) {
+function KiHilfeInnen({ projekt, ziele, vorschlaege, anrede = "Sie", begruessung: eigeneBegruessung }: KiHilfeProps) {
   const seite = normPfad(usePathname());
   const [offen, setOffen] = useState(false);
   const [verlauf, setVerlauf] = useState<KiNachricht[]>(leseVerlauf);
@@ -69,6 +82,7 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
   const bekannt = (id: string) => id in ziele;
 
   const begruessung =
+    eigeneBegruessung ??
     `Guten Tag! Ich bin die KI-Hilfe zur ${projekt} – eine künstliche Intelligenz, kein Mensch. ` +
     "Ich erkläre, was wo auf der Seite steht und wie Sie Anmerkungen hinterlassen. " +
     "Ich kann mich irren. Bitte geben Sie keine persönlichen Angaben ein.";
@@ -152,7 +166,7 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
 
   return (
     <>
-      <Fuehrung ziele={ziele} onZurKiHilfe={() => setOffen(true)} onLaeuft={setFuehrt} />
+      <Fuehrung ziele={ziele} onZurKiHilfe={() => setOffen(true)} onLaeuft={setFuehrt} anrede={anrede} />
       {!offen && (
         <button
           ref={knopfRef}
@@ -206,7 +220,7 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
           </div>
 
           <div ref={listeRef} role="log" aria-live="polite" aria-busy={laeuft} className="gcf-ki-liste">
-            <Blase rolle="ki" text={begruessung} bekannt={bekannt} />
+            <Blase rolle="ki" text={begruessung} bekannt={bekannt} anrede={anrede} />
             {verlauf.map((n, i) => (
               <Blase
                 key={i}
@@ -214,6 +228,7 @@ function KiHilfeInnen({ projekt, ziele, vorschlaege }: { projekt: string; ziele:
                 text={n.text}
                 wartet={laeuft && i === verlauf.length - 1}
                 bekannt={bekannt}
+                anrede={anrede}
                 onFuehren={fuehren}
               />
             ))}
@@ -294,9 +309,11 @@ function Blase({
   text,
   wartet,
   bekannt,
+  anrede,
   onFuehren,
 }: {
   rolle: KiNachricht["rolle"];
+  anrede: "du" | "Sie";
   text: string;
   wartet?: boolean;
   bekannt: (id: string) => boolean;
@@ -306,7 +323,7 @@ function Blase({
     return (
       <div className="gcf-blase-rechts">
         <p className="gcf-blase gcf-blase-nutzer">
-          <span className="gcf-sr">Sie: </span>
+          <span className="gcf-sr">{anrede === "du" ? "Du" : "Sie"}: </span>
           {text}
         </p>
       </div>
