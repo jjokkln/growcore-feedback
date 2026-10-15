@@ -71,10 +71,11 @@ export async function eingangStrom(
   pfad: string,
   body: unknown,
   signal?: AbortSignal,
+  ziel?: { schluessel?: string; url?: string },
 ): Promise<ReadableStream<Uint8Array>> {
-  const schluessel = process.env.GROWCORE_FEEDBACK_KEY?.trim();
+  const schluessel = (ziel ? ziel.schluessel : process.env.GROWCORE_FEEDBACK_KEY)?.trim();
   if (!schluessel) throw new EingangFehler(503, "Das Feedback-Werkzeug ist nicht eingerichtet.");
-  const basis = (process.env.GROWCORE_FEEDBACK_URL?.trim() || STANDARD_URL).replace(/\/$/, "");
+  const basis = ((ziel ? ziel.url : process.env.GROWCORE_FEEDBACK_URL)?.trim() || STANDARD_URL).replace(/\/$/, "");
 
   let antwort: Response;
   try {

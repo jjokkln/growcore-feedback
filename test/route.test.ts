@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 
 import { feedbackRoute } from "../src/next/route.ts";
+import { assistentUeberProjektraum } from "../src/next/speicher.ts";
 import { leseAntwort } from "../src/core/ki-antwort.ts";
 
 const REF = "11111111-2222-3333-4444-555555555555";
@@ -250,6 +251,22 @@ test("Sammelstelle ohne Assistent und Ideen (galdora-network): weder Knopf noch 
   // Eigener Speicher, der nur `true` meldet: wie bisher, der Speicher entscheidet.
   const eigen = { liste: async () => [], anlegen: async () => { throw new Error(); }, antworten: async () => {}, erledigt: async () => {}, loeschen: async () => {}, idee: async () => {}, status: async () => true };
   assert.deepEqual(await (await feedbackRoute({ speicher: eigen }).GET(anfrage("/status", { ref: null }))).json(), { an: true, assistent: false, ideen: true });
+  process.env.KI_HILFE = "";
+});
+
+test("Assistent über den Projektraum bei eigener Sammelstelle (0.16.4)", async () => {
+  assert.equal(assistentUeberProjektraum({ schluessel: " " }), undefined);
+  process.env.KI_HILFE = "1";
+  antwortVomEingang = () => new Response('{"art":"ende"}\n', { headers: { "content-type": "application/x-ndjson" } });
+  const leer = { liste: async () => [], anlegen: async () => { throw new Error(); }, antworten: async () => {}, erledigt: async () => {}, loeschen: async () => {} };
+  const speicher = { ...leer, assistent: assistentUeberProjektraum({ schluessel: "gcf_ki", url: "https://raum.example/" }) };
+  const ki = { produkt: "App", wissen: "Nichts.", ziele: {} };
+  const route = feedbackRoute({ speicher, ki, identitaet: async () => ({ ref: "u1", label: "Teamleitung" }) });
+  assert.equal(((await (await route.GET(anfrage("/status"))).json()) as { assistent: boolean }).assistent, true);
+  const antwort = await route.POST(anfrage("/assistent", { method: "POST", body: JSON.stringify({ seite: "/", nachrichten: [{ rolle: "nutzer", text: "Wo?" }], stellen: [] }) }));
+  assert.equal(antwort.status, 200);
+  assert.equal(aufrufe.at(-1)?.url, "https://raum.example/api/feedback/assistent");
+  assert.equal(new Headers(aufrufe.at(-1)?.init.headers).get("authorization"), "Bearer gcf_ki");
   process.env.KI_HILFE = "";
 });
 

@@ -246,6 +246,8 @@ Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/s
 
 ## Änderungen
 
+- **v0.16.4** (2026-10-16): **KI-Assistent über den Projektraum bei eigener Sammelstelle:** `assistentUeberProjektraum({ schluessel, url })` (Standard: `GROWCORE_KI_KEY`, `GROWCORE_KI_URL`) liefert die Funktion `assistent` für einen eigenen Speicher. Anmerkungen bleiben z. B. in galdora-network, nur die KI-Fragen gehen mit einem eigenen Projektschlüssel an den Projektraum (Kosten dort beim Projekt). Ohne Schlüssel `undefined`, also kein KI-Knopf. Erster Einsatz: Boltwork.
+
 - **v0.16.3** (2026-10-15): Alle Ebenen des Werkzeugs liegen 1100 höher (Leiste 2147483100 statt 2147482000, Reihenfolge untereinander gleich). Der Barrierefreiheits-Knopf unserer Seiten (`.gc-a11y-trigger`, 2147483000) verdeckte am Handy „Idee“ in der Leiste (gemessen schrooten-web, 390 px).
 
 - **v0.16.2** (2026-10-15): **Assistent und „Idee“ nur, wenn die Sammelstelle sie kann.** `speicher.status()` darf `{ an, assistent?, ideen? }` liefern (`SammelstellenStatus`); der Standard-Speicher übernimmt nur, was die Sammelstelle ausdrücklich mit `true` meldet. Der Projektraum meldet beides (ab 15.10.2026 spät), galdora-network nicht: Dort erscheint „Idee“ nicht mehr, statt beim Klick mit 404 zu scheitern. Ein eigener Speicher, der nur `true`/`false` liefert, verhält sich wie bisher.

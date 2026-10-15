@@ -111,3 +111,25 @@ export const eingangsSpeicher: FeedbackSpeicher = {
   status: eingangStatus,
   personen: eingangPersonen,
 };
+
+/**
+ * Der KI-Assistent über den Projektraum, auch wenn die Anmerkungen woanders
+ * liegen (0.16.4). Für Apps mit eigener Sammelstelle (Galdora: galdora-network),
+ * die trotzdem den Assistenten wollen: Die Fragen gehen mit einem eigenen
+ * Projektschlüssel an den Projektraum, Kosten stehen dort beim Projekt.
+ *
+ *   speicher: { ...meinSpeicher, assistent: assistentUeberProjektraum() }
+ *
+ * Ohne Schlüssel (Standard: `GROWCORE_KI_KEY`) ergibt das `undefined`, und das
+ * Overlay zeigt keinen KI-Knopf. Meldet die eigene Sammelstelle `status()`,
+ * muss sie `assistent` dort nicht abstreiten (siehe `SammelstellenStatus`).
+ */
+export function assistentUeberProjektraum(
+  ziel: { schluessel?: string; url?: string } = {
+    schluessel: process.env.GROWCORE_KI_KEY,
+    url: process.env.GROWCORE_KI_URL,
+  },
+): FeedbackSpeicher["assistent"] {
+  if (!ziel.schluessel?.trim()) return undefined;
+  return (anfrage, signal) => eingangStrom("/assistent", anfrage, signal, ziel);
+}
