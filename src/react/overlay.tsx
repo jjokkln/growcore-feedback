@@ -987,20 +987,28 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               boxShadow: "0 2px 10px rgba(0,0,0,.18)",
               cursor: "grab",
               touchAction: "none",
-              display: offen === n.id ? "none" : "-webkit-box",
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
+              display: offen === n.id ? "none" : "block",
               textDecoration: n.done ? "line-through" : "none",
             }}
           >
-            {n.from_agency && (
-              // Text in Vordergrundfarbe, nicht in Blau: Blau auf dem dunklen
-              // Grund fällt unter 4,5:1 (axe, 27.09.2026). Die Farbe trägt
-              // der linke Rand.
-              <strong style={{ fontWeight: 600 }}>{ART_LABEL[n.kind]}: </strong>
-            )}
-            {n.body ?? "✎ ohne Text"}
+            {/* Die Begrenzung auf drei Zeilen sitzt INNEN: Am Knopf selbst schaute die
+                vierte Zeile durch den Innenabstand unten heraus (gesehen 2026-10-15). */}
+            <span
+              style={{
+                display: "-webkit-box",
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {n.from_agency && (
+                // Text in Vordergrundfarbe, nicht in Blau: Blau auf dem dunklen
+                // Grund fällt unter 4,5:1 (axe, 27.09.2026). Die Farbe trägt
+                // der linke Rand.
+                <strong style={{ fontWeight: 600 }}>{ART_LABEL[n.kind]}: </strong>
+              )}
+              {n.body ?? "✎ ohne Text"}
+            </span>
             {n.replies.some((a) => a.from_agency) && !n.from_agency && (
               <span style={{ display: "block", marginTop: 3, color: T.leise, fontWeight: 600 }}>
                 ↳ Antwort von Lenny

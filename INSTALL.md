@@ -246,6 +246,8 @@ Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/s
 
 ## Änderungen
 
+- **v0.16.1** (2026-10-15): Zettel an Kreisen begrenzen den Text innen auf drei Zeilen; vorher schaute die vierte Zeile durch den Innenabstand heraus.
+
 - **v0.16.0** (2026-10-15): **Eine Stelle aus mehreren Elementen:** `anchor_selector` darf `A || B || C` sein; Marke und Kreis gelten dann für die gemeinsame Box (`ankerElemente`, `ankerRahmen`). Damit setzt GrowCore per MCP einen Kreis oder ein Rechteck um mehrere Elemente, in Anteilen der Box frei bemessen (Projektraum `feedback_anmerkung_setzen`: `form` kreis/rechteck/punkt, `bereich`, `weitere_selektoren`). Ältere Fassungen zeigen solche Stellen als „nicht gefunden“.
 
 - **v0.15.0** (2026-10-15): **Lenny zeichnet selbst auf der Website.** Im Projektraum auf `/feedback` öffnet „Als Lenny anmerken“ die Website mit einem signierten Zugang (`#gcf-lenny=…`, 14 Tage, nur dieses Projekt). Das Overlay merkt ihn sich, entfernt ihn aus der Adresse und zeigt „Als Lenny ✕“. Dann gibt es statt der Farbpunkte „Frage / Hinweis / Geändert“ in Blau; Antworten laufen unter Lennys Namen, GrowCore-Anmerkungen lassen sich löschen. Geprüft wird der Zugang nur im Projektraum (`x-gcf-agentur` → `agentur` im Körper), ohne gültigen Zugang wird Blau zu Rot. Beim Kunden: blaue Zahl am `?`, solange eine Frage von Lenny auf Antwort wartet, das Antwortfeld hat sofort den Fokus. Dazu „Idee“ direkt neben „Einkreisen“ und „x offen“ statt „Liste · x offen“. `FeedbackSpeicher.anlegen/antworten/loeschen` nehmen optional `agentur`.
