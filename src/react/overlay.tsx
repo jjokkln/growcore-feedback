@@ -9,6 +9,8 @@ import {
   aktuellePunkte,
   alsPfad,
   ausduennen,
+  ankerElemente,
+  ankerRahmen,
   elementUnter,
   findeAnker,
   istSeitenweit,
@@ -335,9 +337,9 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
      * Anker noch in ihm noch um ihn herum, ist die Stelle verdeckt.
      */
     const istVerdeckt = (selektor: string, probe: Punkt): boolean => {
-      const anker = findeAnker(selektor);
-      if (!anker) return false;
-      const box = anker.getBoundingClientRect();
+      const elemente = ankerElemente(selektor);
+      const box = ankerRahmen(selektor);
+      if (!box) return false;
       const links = Math.max(box.left, 0) + 2;
       const rechts = Math.min(box.right, window.innerWidth) - 2;
       const oben = Math.max(box.top, 0) + 2;
@@ -349,7 +351,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
         .elementsFromPoint(x, y)
         .find((el) => !el.closest(`[${OVERLAY_ATTR}],[data-ki-ui]`));
       if (!oberstes) return false;
-      return !anker.contains(oberstes) && !oberstes.contains(anker);
+      return !elemente.some((anker) => anker.contains(oberstes) || oberstes.contains(anker));
     };
     /** Ergebnis je Anmerkung, höchstens alle 150 ms neu: Treffertests kosten Layout. */
     const verdeckt = new Map<string, boolean>();
@@ -644,7 +646,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       return;
     }
 
-    const box = findeAnker(entwurf.anchor_selector)?.getBoundingClientRect();
+    const box = ankerRahmen(entwurf.anchor_selector);
     const ok = await speichere({
       ...gemeinsam,
       shape: "pin",

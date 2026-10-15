@@ -251,10 +251,9 @@ export function aktuellePunkte(notiz: {
   points: Punkt[];
   fallback: Punkt[];
 }): { punkte: Punkt[]; verankert: boolean } | null {
-  const anker = findeAnker(notiz.anchor_selector);
+  const box = ankerRahmen(notiz.anchor_selector);
 
-  if (anker) {
-    const box = anker.getBoundingClientRect();
+  if (box) {
     if (box.width > 0 && box.height > 0) {
       return { punkte: notiz.points.map((p) => ausAnkerAnteil(p, box)), verankert: true };
     }
@@ -263,8 +262,53 @@ export function aktuellePunkte(notiz: {
   return { punkte: notiz.fallback.map(ausDokumentAnteil), verankert: false };
 }
 
-/** `querySelector`, der an einem ungültigen Selektor nicht wirft. */
+/**
+ * Mehrere Elemente als EINE Stelle (0.16.0): `A || B || C`. So kreist GrowCore
+ * z. B. drei Karten zusammen ein. Die Punkte gelten dann für die gemeinsame Box.
+ * Ältere Fassungen finden mit `||` nichts (ungültiger Selektor) und zeigen
+ * „Stelle nicht gefunden“, statt falsch zu zeichnen.
+ */
+export const SELEKTOR_TRENNER = " || ";
+
+/** Alle Elemente der Stelle; fehlt eines, ist die Stelle nicht da (sonst stimmte die Box nicht). */
+export function ankerElemente(selektor: string): Element[] {
+  const teile = selektor.split(SELEKTOR_TRENNER);
+  const elemente: Element[] = [];
+  for (const teil of teile) {
+    const el = findeEinzeln(teil.trim());
+    if (!el) return [];
+    elemente.push(el);
+  }
+  return elemente;
+}
+
+/** Die Box der Stelle in Viewport-Koordinaten, bei mehreren Elementen die gemeinsame; sonst `null`. */
+export function ankerRahmen(selektor: string): DOMRect | null {
+  const elemente = ankerElemente(selektor);
+  if (!elemente.length) return null;
+  let links = Infinity;
+  let oben = Infinity;
+  let rechts = -Infinity;
+  let unten = -Infinity;
+  for (const el of elemente) {
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 && r.height <= 0) continue;
+    links = Math.min(links, r.left);
+    oben = Math.min(oben, r.top);
+    rechts = Math.max(rechts, r.right);
+    unten = Math.max(unten, r.bottom);
+  }
+  if (!Number.isFinite(links) || rechts - links <= 0 || unten - oben <= 0) return null;
+  return new DOMRect(links, oben, rechts - links, unten - oben);
+}
+
+/** Das erste Element der Stelle (zum Hinscrollen), oder `null`. */
 export function findeAnker(selektor: string): Element | null {
+  return ankerElemente(selektor)[0] ?? null;
+}
+
+/** `querySelector`, der an einem ungültigen Selektor nicht wirft. */
+function findeEinzeln(selektor: string): Element | null {
   try {
     return document.querySelector(selektor);
   } catch {
