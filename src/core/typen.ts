@@ -111,19 +111,39 @@ export const antwortSchema = z.object({
 
 export const erledigtSchema = z.object({ done: z.boolean() });
 
-/** Eine Nachricht an die KI-Hilfe. Der Verlauf fährt bei jeder Frage mit. */
-export const kiEingabeSchema = z.object({
+/** Eine Stelle der Seite, die der KI-Assistent einkreisen kann (0.12.0). Nur Beschriftungen, kein Markup. */
+export const stelleSchema = z.object({
+  id: z.string().regex(/^s\d{1,3}$/),
+  art: z.string().trim().min(1).max(24),
+  label: z.string().trim().min(1).max(120),
+});
+
+/**
+ * Eine Frage an den KI-Assistenten (0.12.0). Der Verlauf fährt bei jeder Frage
+ * mit, dazu die sichtbaren Stellen der Seite. Die Grenzen spiegeln
+ * `assistentSchema` im Projektraum (`src/lib/feedback/schema.ts`).
+ */
+export const assistentEingabeSchema = z.object({
   seite: pfad,
   nachrichten: z
     .array(
       z.object({
         rolle: z.enum(["nutzer", "ki"]),
-        text: z.string().trim().min(1).max(2000),
+        text: z.string().trim().min(1).max(4000),
       }),
     )
     .min(1)
-    .max(20)
+    .max(30)
     .refine((n) => n[n.length - 1]?.rolle === "nutzer", "Die letzte Nachricht muss eine Frage sein.")
-    .refine((n) => n.reduce((s, x) => s + x.text.length, 0) <= 12_000, "Der Verlauf ist zu lang."),
+    .refine((n) => n.reduce((s, x) => s + x.text.length, 0) <= 30_000, "Der Verlauf ist zu lang."),
+  stellen: z.array(stelleSchema).max(150).default([]),
 });
 export type KiNachricht = { rolle: "nutzer" | "ki"; text: string };
+
+/** Eine Idee an Lenny (0.12.0): Knopf „Idee“ in der Leiste oder Vorschlag des Assistenten. */
+export const ideeSchema = z.object({
+  titel: z.string().trim().min(1, "Die Idee braucht einen Titel.").max(200),
+  beschreibung: z.string().trim().max(4000).nullish(),
+  seite: pfad.nullish(),
+});
+export type NeueIdee = z.infer<typeof ideeSchema>;

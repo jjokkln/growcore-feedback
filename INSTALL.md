@@ -12,8 +12,14 @@ Das Feedback-Werkzeug für jedes GrowCore-Projekt **in Entwicklung**:
   schreiben, oder kreisen einen Bereich ein. GrowCore setzt Fragen, Hinweise
   und „Geändert – bitte prüfen“ aus dem Projektraum. Beide antworten sich an
   der Stelle, haken ab, exportieren als Markdown.
-- **KI-Hilfe** unten rechts: erklärt, was wo steht, und zeigt Schritt für
-  Schritt auf die Stelle.
+- **KI-Assistent** unten rechts (seit v0.12.0, vorher „KI-Hilfe“): erklärt,
+  was wo steht, und zeigt Schritt für Schritt auf die Stelle; beantwortet
+  Fragen zum Projekt aus dem Projektraum; kreist auf Wunsch eine Stelle ein und
+  notiert die Anmerkung; schickt Ideen an Lenny. Anmerkung und Idee entstehen
+  erst nach Klick der Person. Die KI läuft im Projektraum (Claude Haiku 5.5),
+  nicht in der App — die Kosten stehen dort je Projekt und Kunde.
+- **Idee** in der Leiste: ein Wunsch ohne bestimmte Stelle, landet im
+  Projektraum als Vorschlag.
 
 **Gespeichert wird nichts im Projekt.** Alles landet im zentralen Eingang des
 Projektraums (lennys-projekte.de). Die Seite braucht **keine eigene Datenbank**,
@@ -48,16 +54,12 @@ nirgends sonst hin.
 | --- | --- | --- |
 | `FEEDBACK` | `1` | Werkzeug an. Ohne: keine Route, kein Client-Code |
 | `GROWCORE_FEEDBACK_KEY` | `gcf_…` | Schlüssel aus Schritt 2, **nur Server** |
-| `KI_HILFE` | `1` | KI-Hilfe an (optional) |
-| `KI_SERVICE_ACCOUNT_KEY` | JSON des Dienstkontos | Vertex AI, Rolle „Vertex AI User“ |
-| `KI_PROJEKT` | GCP-Projekt-ID | nur, wenn nicht im Schlüssel |
+| `KI_HILFE` | `1` | KI-Assistent an (optional, braucht Schritt 5) |
 
-Region und Modell stehen im Paket: `gemini-3.5-flash`, EU-Multiregion
-(`aiplatform.eu.rep.googleapis.com`). Überschreibbar mit `KI_MODELL`, `KI_ORT`,
-`KI_ENDPUNKT`. ⚠️ `KI_ORT=global` verlässt die EU.
-
-⚠️ Den JSON-Schlüssel **ohne** umschließende Anführungszeichen ins
-Vercel-Feld kopieren (der Code verzeiht sie, aber nur einfache).
+Kein KI-Schlüssel in der App: Der Assistent läuft im Projektraum, die App reicht
+die Frage mit ihrem Projektschlüssel weiter. Die alten Variablen
+`KI_SERVICE_ACCOUNT_KEY`, `KI_PROJEKT`, `KI_MODELL`, `KI_ORT`, `KI_ENDPUNKT`
+(Vertex, bis v0.11) können weg.
 
 Umgebungsvariablen greifen erst im **nächsten Deployment**.
 
@@ -73,10 +75,12 @@ export const { GET, POST, PATCH, DELETE } = feedbackRoute({ ki: KI_WISSEN });
 export const dynamic = "force-dynamic";
 ```
 
-## 5. Wissen und Ziele für die KI-Hilfe
+## 5. Wissen und Ziele für den KI-Assistenten
 
-`src/content/ki-wissen.ts` — **die einzige Quelle**, aus der die KI antwortet.
-Nie das AI-OS, nie Kundendaten.
+`src/content/ki-wissen.ts` — **die einzige Quelle**, aus der die KI über die
+Seite antwortet (über das Projekt antwortet sie aus dem Projektraum). Nie das
+AI-OS, nie Kundendaten. Die App schickt den Text mit jeder Frage mit; Selektoren
+der Ziele bleiben im Browser, die KI sieht nur Kennung und Namen.
 
 ```ts
 import type { KiWissen } from "@growcore/feedback/next";
@@ -153,11 +157,14 @@ Anmerkungen daran hängen und in der Liste lesbar heißen.
 
 - **KI-Kennzeichnung (Art. 50 AI Act):** eingebaut — „KI“ auf dem Knopf, im
   Kopf, in der Begrüßung, über jeder Antwort. Nichts davon entfernen.
-- **Einstufung:** KI-Hilfe = Chatbot, begrenztes Risiko; GrowCore ist
-  Anbieter. Steht in DECISIONS des AI-OS, nicht je Projekt neu.
-- **Datenschutzerklärung** des Projekts nennt: Speicherung der Anmerkungen und
-  KI-Fragen im Projektraum (Supabase Frankfurt, KI-Fragen 30 Tage), Vertex AI
-  (Google, EU-Multiregion), Zweck „Abstimmung während der Entwicklung“.
+- **Einstufung:** KI-Assistent = Chatbot, begrenztes Risiko; GrowCore ist
+  Anbieter. Steht in growcore-feedback DECISIONS 2026-10-15, nicht je Projekt neu.
+- **Einwilligung:** Vor der ersten Frage klickt die Person „Einverstanden“
+  (Übermittlung an Anthropic, USA); gemerkt im Browser.
+- **Datenschutzerklärung** des Projekts nennt (sobald es eine gibt):
+  Speicherung der Anmerkungen, Ideen und KI-Fragen im Projektraum (Supabase
+  Frankfurt, KI-Fragen 30 Tage), KI-Assistent über Anthropic (Claude, USA, mit
+  Einwilligung), Zweck „Abstimmung während der Entwicklung“.
 - **Zum Livegang ausschalten:** `FEEDBACK` entfernen, neu deployen. Der Eingang
   behält die Anmerkungen.
 
@@ -200,8 +207,9 @@ export const { GET, POST, PATCH, DELETE } = feedbackRoute({
 - `identitaet` gibt `null` → **401 auf jeder Route**, auch Lesen und KI. Die Kopfzeilen
   `x-gcf-autor`/`x-gcf-name` des Browsers zählen dann nicht mehr.
 - `FeedbackSpeicher` (`liste`, `anlegen`, `antworten`, `erledigt`, `loeschen`, optional
-  `kiFrage`): Fehler als `EingangFehler(status, text)` werfen. Ohne `kiFrage` wird der
-  Wortlaut einer KI-Frage nirgends festgehalten.
+  `status`, `personen`, `assistent`, `idee`): Fehler als `EingangFehler(status, text)`
+  werfen. Ohne `assistent` gibt es keinen KI-Assistenten, ohne `idee` keinen Knopf „Idee“.
+  `kiFrage` ist seit v0.12.0 ungenutzt.
 - `datensparsam`: Die Stellenbeschriftung kommt **nur** aus `data-review-anker` (sonst
   `#id` oder `<tag>`), nie aus Überschrift, `aria-label`, `alt` oder Text. Große
   Einheiten der Seite deshalb mit `data-review-anker="Name"` benennen.
@@ -212,9 +220,11 @@ export const { GET, POST, PATCH, DELETE } = feedbackRoute({
 - Kein `GROWCORE_FEEDBACK_KEY` nötig. Das Projekt braucht keinen Eintrag im Projektraum.
 - ⚠️ Der Anmerkungstext selbst bleibt Freitext. `hinweis` sagt, was nicht hineingehört;
   technisch verhindern lässt es sich nicht.
-- ⚠️ Die KI-Hilfe schickt Fragen an Vertex AI (Google). Wer Fragen über Personen stellt,
-  schickt sie dorthin. Das Wissen der KI (`KI_WISSEN`) enthält nur Beschreibung der
-  Oberfläche, keine Daten.
+- ⚠️ Der KI-Assistent schickt Fragen und die Beschriftungen der Seite an die
+  Sammelstelle und von dort an Anthropic. Mit `datensparsam` gehen nur
+  `data-review-anker`-Namen hinaus, kein Seitentext. Wer Fragen über Personen stellt,
+  schickt sie trotzdem mit. Das Wissen der KI (`KI_WISSEN`) enthält nur Beschreibung
+  der Oberfläche, keine Daten.
 
 ## Ohne Next: eigenständige Fassung (ab v0.8.0)
 
@@ -235,6 +245,8 @@ Für Seiten aus reinem HTML (z. B. arbeitsschutz-doc) oder exportierte Design-Se
 Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/status`.
 
 ## Änderungen
+
+- **v0.12.0** (2026-10-15): **KI-Assistent statt KI-Hilfe, Knopf „Idee“.** Die KI läuft im Projektraum (Claude Haiku 5.5, `POST /api/feedback/assistent` mit Projektschlüssel), nicht mehr über Vertex; Gemini und `KI_SERVICE_ACCOUNT_KEY` sind raus. Sie kennt den Projektstand (ohne Preise, Angebote, Zahlungen), erklärt die Seite wie bisher und schlägt vor, eine Stelle einzukreisen (wird eine normale Anmerkung) oder eine Idee an Lenny zu schicken (wird ein Vorschlag im Projektraum) — beides erst nach Klick. Vor der ersten Frage „Einverstanden“. `GET /status` meldet zusätzlich `assistent` und `ideen`. Neu im `FeedbackSpeicher`: `assistent`, `idee`. Braucht den Projektraum ab dem 15.10.2026. Entscheidung: growcore-feedback DECISIONS 2026-10-15.
 
 - **v0.11.1** (2026-10-12): Zielmarken ohne `ziel:` (`[nav-team]`) werden erkannt, wenn die Kennung im Katalog steht. Gemini lässt das Präfix manchmal weg; die Marke stand dann roh im Schritt, ohne „Zeigen“.
 - **v0.11.0** (2026-10-12): **Begrüßung und Anrede im KI-Fenster.** `KiHilfe` nimmt `anrede` (`"du"`/`"Sie"`, auch für die Führungskarte und die Vorlese-Beschriftung der eigenen Frage) und `begruessung` (erste Nachricht; muss sagen, dass eine KI antwortet). Ohne sie bleibt alles wie bisher. Wer die KI-Hilfe ohne `FeedbackWerkzeug` einbindet (z. B. nur für bestimmte Rollen), rendert `KiHilfe` aus `@growcore/feedback/react` selbst.

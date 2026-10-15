@@ -77,6 +77,10 @@ export function useLeisteOffen(): [boolean, (offen: boolean) => void] {
  * den Blick kommt — so wirkt ein Ausschalten ohne Neuladen.
  */
 let an: boolean | null = null;
+/** Welche Teile die Route anbietet (0.12.0). Ältere Routen melden nichts → beides aus. */
+export type Faehigkeiten = { assistent: boolean; ideen: boolean };
+const KEINE: Faehigkeiten = { assistent: false, ideen: false };
+let faehigkeiten: Faehigkeiten = KEINE;
 let laeuft = false;
 let zuletzt = 0;
 const anHoerer = new Set<() => void>();
@@ -86,15 +90,21 @@ async function anFragen(): Promise<void> {
   laeuft = true;
   zuletzt = Date.now();
   let neu = false;
+  let teile = KEINE;
   try {
     const antwort = await fetch("/api/feedback/status", { cache: "no-store" });
-    const daten = antwort.ok ? ((await antwort.json().catch(() => ({}))) as { an?: unknown }) : {};
+    const daten = antwort.ok
+      ? ((await antwort.json().catch(() => ({}))) as { an?: unknown; assistent?: unknown; ideen?: unknown })
+      : {};
     neu = daten.an === true;
+    teile = neu ? { assistent: daten.assistent === true, ideen: daten.ideen === true } : KEINE;
   } catch {
     neu = false;
   }
   laeuft = false;
-  if (neu !== an) {
+  const teileNeu = teile.assistent !== faehigkeiten.assistent || teile.ideen !== faehigkeiten.ideen;
+  if (teileNeu) faehigkeiten = teile;
+  if (neu !== an || teileNeu) {
     an = neu;
     anHoerer.forEach((h) => h());
   }
@@ -117,4 +127,21 @@ function anAbonnieren(h: () => void) {
 /** `true` nur, wenn die Sammelstelle das Werkzeug für dieses Projekt eingeschaltet hat. */
 export function useWerkzeugAn(): boolean {
   return useSyncExternalStore(anAbonnieren, () => an === true, () => false);
+}
+
+/** Was die Route außer Anmerkungen anbietet: KI-Assistent und Knopf „Idee“ (0.12.0). */
+export function useFaehigkeiten(): Faehigkeiten {
+  return useSyncExternalStore(anAbonnieren, () => faehigkeiten, () => KEINE);
+}
+
+// ─── Neu laden (0.12.0) ────────────────────────────────────────────────────
+
+/**
+ * Der KI-Assistent legt Anmerkungen an, das Overlay zeigt sie. Beide sind
+ * getrennt eingebunden (siehe oben), deshalb ein Ereignis statt geteiltem State.
+ */
+export const NEU_LADEN = "gcf:anmerkungen-neu";
+
+export function anmerkungenGeaendert() {
+  window.dispatchEvent(new Event(NEU_LADEN));
 }

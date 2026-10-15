@@ -1,10 +1,22 @@
-import type { Anmerkung, Antwort, Autor, NeueAnmerkung } from "../core/typen.ts";
-import { eingang, eingangPersonen, eingangStatus } from "./eingang.ts";
+import type { Stelle } from "../core/assistent.ts";
+import type { Anmerkung, Antwort, Autor, KiNachricht, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
+import type { SammelstellenWissen } from "./anweisungen.ts";
+import { eingang, eingangPersonen, eingangStatus, eingangStrom } from "./eingang.ts";
 
 /** Eine Anmerkung samt Kennung des Autors, wie der Server sie kennt. Die Kennung geht nie zum Browser. */
 export type Zeile = Omit<Anmerkung, "eigen" | "replies"> & {
   author_ref?: string | null;
   replies?: Array<Antwort & { author_ref?: string | null }>;
+};
+
+/** Was die Route an den Assistenten der Sammelstelle weiterreicht (0.12.0). */
+export type AssistentAnfrage = {
+  seite: string;
+  nachrichten: KiNachricht[];
+  stellen: Stelle[];
+  /** Anzeigename aus dem Overlay, `null` ohne Namen. */
+  autor: string | null;
+  wissen: SammelstellenWissen;
 };
 
 /**
@@ -27,8 +39,23 @@ export interface FeedbackSpeicher {
   antworten(id: string, body: string, autor: Autor): Promise<void>;
   erledigt(id: string, done: boolean, autor: Autor): Promise<void>;
   loeschen(id: string, autor: Autor): Promise<void>;
-  /** Optional. Ohne diese Funktion wird der Wortlaut einer KI-Frage nirgends festgehalten. */
+  /**
+   * @deprecated Seit 0.12.0 ungenutzt: Die Sammelstelle hält die Frage selbst fest,
+   * wenn sie den Assistenten beantwortet (`assistent`). Bleibt nur, damit eigene
+   * Speicher älterer Fassungen weiter kompilieren.
+   */
   kiFrage?(frage: string, seite: string, autor: Autor | null): Promise<void>;
+  /**
+   * Optional (0.12.0): der KI-Assistent der Sammelstelle. Liefert den Antwortstrom
+   * als NDJSON (`AssistentEreignis` je Zeile). Ohne diese Funktion gibt es keinen
+   * Assistenten, auch nicht mit `KI_HILFE=1`.
+   */
+  assistent?(anfrage: AssistentAnfrage, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>>;
+  /**
+   * Optional (0.12.0): eine Idee an die Sammelstelle (im Projektraum ein Vorschlag).
+   * Ohne diese Funktion zeigt das Overlay keinen Knopf „Idee“.
+   */
+  idee?(idee: NeueIdee, autor: Autor): Promise<void>;
   /**
    * Optional (0.7.0): Ist das Werkzeug für dieses Projekt eingeschaltet? Der
    * Schalter liegt bei der Sammelstelle, nicht in der App. Ohne diese
@@ -57,8 +84,9 @@ export const eingangsSpeicher: FeedbackSpeicher = {
   loeschen: async (id, autor) => {
     await eingang(`/anmerkungen/${id}`, { method: "DELETE", body: { author: autor } });
   },
-  kiFrage: async (frage, seite) => {
-    await eingang("/ki-fragen", { method: "POST", body: { question: frage.slice(0, 2000), path: seite } });
+  assistent: (anfrage, signal) => eingangStrom("/assistent", anfrage, signal),
+  idee: async (idee, autor) => {
+    await eingang("/ideen", { method: "POST", body: { ...idee, author: autor } });
   },
   status: eingangStatus,
   personen: eingangPersonen,

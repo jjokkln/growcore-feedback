@@ -145,19 +145,61 @@ test("Fehler des Eingangs: 403 bleibt 403, falscher Schlüssel wird 503 ohne Det
   assert.ok(!(await schluessel.text()).includes("Schlüssel ungültig"));
 });
 
-test("KI-Hilfe: aus ohne KI_HILFE=1, und ohne Meldung an den Eingang keine Frage an Gemini", async () => {
-  const ki = { produkt: "Testseite", wissen: "Nichts.", ziele: {} };
-  const { POST } = feedbackRoute({ ki });
-  const koerper = JSON.stringify({ seite: "/", nachrichten: [{ rolle: "nutzer", text: "Hallo?" }] });
+test("Assistent: aus ohne KI_HILFE=1 oder ohne Wissen, sonst Strom vom Eingang durchgereicht", async () => {
+  const ki = { produkt: "Testseite", wissen: "Nichts.", ziele: { kontakt: { name: "Kontakt", selektoren: [{ css: "#k" }] } } };
+  const koerper = JSON.stringify({
+    seite: "/",
+    nachrichten: [{ rolle: "nutzer", text: "Hallo?" }],
+    stellen: [{ id: "s1", art: "Abschnitt", label: "Start" }],
+  });
   process.env.KI_HILFE = "";
-  assert.equal((await POST(anfrage("/ki-hilfe", { method: "POST", body: koerper }))).status, 503);
-
+  assert.equal((await feedbackRoute({ ki }).POST(anfrage("/assistent", { method: "POST", body: koerper }))).status, 503);
   process.env.KI_HILFE = "1";
-  antwortVomEingang = () => Response.json({ fehler: "zu viel" }, { status: 429 });
-  const gebremst = await POST(anfrage("/ki-hilfe", { method: "POST", body: koerper }));
-  assert.equal(gebremst.status, 429);
-  assert.equal(aufrufe.length, 1);
-  assert.ok(aufrufe[0]?.url.endsWith("/api/feedback/ki-fragen"));
+  assert.equal((await feedbackRoute().POST(anfrage("/assistent", { method: "POST", body: koerper }))).status, 503);
+  assert.equal(aufrufe.length, 0);
+
+  const zeilen = '{"typ":"text","text":"Hi"}\n{"typ":"ende","text":"Hi"}\n';
+  antwortVomEingang = () => new Response(zeilen, { headers: { "content-type": "application/x-ndjson" } });
+  const antwort = await feedbackRoute({ ki }).POST(anfrage("/assistent", { method: "POST", body: koerper }));
+  assert.equal(antwort.status, 200);
+  assert.equal(await antwort.text(), zeilen);
+  assert.ok(aufrufe[0]?.url.endsWith("/api/feedback/assistent"));
+  const gesendet = JSON.parse(String(aufrufe[0]?.init.body)) as Record<string, unknown>;
+  // Ohne Namen (Kopfzeile fehlt → „Gast“) geht kein Name an die KI.
+  assert.equal(gesendet.autor, null);
+  assert.deepEqual(gesendet.stellen, [{ id: "s1", art: "Abschnitt", label: "Start" }]);
+  assert.deepEqual((gesendet.wissen as { ziele: unknown }).ziele, [{ id: "kontakt", name: "Kontakt" }]);
+  process.env.KI_HILFE = "";
+});
+
+test("Assistent: Fehler des Eingangs vor dem Strom kommen als Satz, nicht als Strom", async () => {
+  process.env.KI_HILFE = "1";
+  const ki = { produkt: "Testseite", wissen: "Nichts.", ziele: {} };
+  antwortVomEingang = () => Response.json({ fehler: "Der KI-Assistent ist für diesen Monat ausgelastet." }, { status: 429 });
+  const koerper = JSON.stringify({ seite: "/", nachrichten: [{ rolle: "nutzer", text: "Hallo?" }] });
+  const antwort = await feedbackRoute({ ki }).POST(anfrage("/assistent", { method: "POST", body: koerper }));
+  assert.equal(antwort.status, 429);
+  assert.match(((await antwort.json()) as { fehler: string }).fehler, /ausgelastet/);
+  process.env.KI_HILFE = "";
+});
+
+test("Status meldet Assistent und Ideen; Idee geht mit Autor an den Eingang", async () => {
+  process.env.KI_HILFE = "1";
+  const ki = { produkt: "Testseite", wissen: "Nichts.", ziele: {} };
+  const status = (await (await feedbackRoute({ ki }).GET(anfrage("/status", { ref: null }))).json()) as Record<string, unknown>;
+  assert.deepEqual(status, { an: true, assistent: true, ideen: true });
+  const ohneKi = (await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json()) as Record<string, unknown>;
+  assert.equal(ohneKi.assistent, false);
+  process.env.KI_HILFE = "";
+
+  antwortVomEingang = () => Response.json({ idee: { id: ID } }, { status: 201 });
+  const { POST } = feedbackRoute();
+  assert.equal((await POST(anfrage("/ideen", { method: "POST", body: JSON.stringify({ titel: "" }) }))).status, 400);
+  const ok = await POST(anfrage("/ideen", { method: "POST", body: JSON.stringify({ titel: "Newsletter", seite: "/" }) }));
+  assert.equal(ok.status, 201);
+  const gesendet = JSON.parse(String(aufrufe.at(-1)?.init.body)) as Record<string, unknown>;
+  assert.equal(gesendet.titel, "Newsletter");
+  assert.deepEqual(gesendet.author, { label: "Gast", ref: REF });
 });
 
 test("Antwortparser: unbekannte Ziele fallen weg, halbe Marken blitzen nicht auf", () => {
@@ -173,7 +215,7 @@ test("Schalter an: /status sagt an, der Rest läuft wie bisher", async () => {
   const { GET } = feedbackRoute();
   const antwort = await GET(anfrage("/status", { ref: null }));
   assert.equal(antwort.status, 200);
-  assert.deepEqual(await antwort.json(), { an: true });
+  assert.deepEqual(await antwort.json(), { an: true, assistent: false, ideen: true });
   assert.equal((await GET(anfrage("/anmerkungen"))).status, 200);
   // 30 s gemerkt: zweimal gefragt, einmal bei der Sammelstelle.
   assert.equal(statusAufrufe, 1);
@@ -191,7 +233,7 @@ test("Schalter aus: /status sagt aus, alle anderen Pfade 404, kein Datenaufruf",
 
 test("Sammelstelle ohne Schalter (404) gilt als an, nicht erreichbar oder abgewiesen als aus", async () => {
   statusVomEingang = () => Response.json({ fehler: "Nicht gefunden." }, { status: 404 });
-  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: true });
+  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: true, assistent: false, ideen: true });
 
   statusVomEingang = () => Response.json({ fehler: "Schlüssel ungültig." }, { status: 401 });
   assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: false });
@@ -210,7 +252,7 @@ test("ohne Schlüssel ist das Werkzeug aus, ohne die Sammelstelle zu fragen", as
 
 test("eigener Speicher ohne status(): an; mit status(): dessen Antwort", async () => {
   const leer = { liste: async () => [], anlegen: async () => { throw new Error(); }, antworten: async () => {}, erledigt: async () => {}, loeschen: async () => {} };
-  assert.deepEqual(await (await feedbackRoute({ speicher: leer }).GET(anfrage("/status", { ref: null }))).json(), { an: true });
+  assert.deepEqual(await (await feedbackRoute({ speicher: leer }).GET(anfrage("/status", { ref: null }))).json(), { an: true, assistent: false, ideen: false });
   const aus = { ...leer, status: async () => false };
   const route = feedbackRoute({ speicher: aus });
   assert.deepEqual(await (await route.GET(anfrage("/status", { ref: null }))).json(), { an: false });

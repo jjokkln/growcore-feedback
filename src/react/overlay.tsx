@@ -20,9 +20,9 @@ import {
 import { alsMarkdown } from "../core/export.ts";
 import { ART_LABEL, FARBNAME, FARBWERT, KUNDEN_FARBEN, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
 // Nur Typen: zod bleibt aus dem Browser-Bündel.
-import type { Anmerkung, NeueAnmerkung } from "../core/typen.ts";
+import type { Anmerkung, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
-import { offeneMelden, useEinstieg, useLeisteOffen, useWerkzeugAn } from "./einstieg.ts";
+import { NEU_LADEN, offeneMelden, useEinstieg, useFaehigkeiten, useLeisteOffen, useWerkzeugAn } from "./einstieg.ts";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
 import { Griff, Haken, Runter, Stift } from "./icons.tsx";
 import {
@@ -141,6 +141,9 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   const [entwurfRoh, setEntwurf] = useState<Entwurf | null>(null);
   const [offen, setOffen] = useState<string | null>(null);
   const [listeAufRoh, setListeAuf] = useState(false);
+  /** Das Feld „Idee“ (0.12.0) — nur, wenn die Route Ideen annimmt. */
+  const { ideen } = useFaehigkeiten();
+  const [ideeAufRoh, setIdeeAuf] = useState(false);
 
   // Ist die Leiste zu (über das `?` in der Navigation), gilt „Ansehen" — ohne
   // Liste, ohne halbfertigen Entwurf. Abgeleitet statt zurückgesetzt: Der
@@ -149,6 +152,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   const modus: Modus = leisteOffen ? modusRoh : "ansehen";
   const entwurf = leisteOffen ? entwurfRoh : null;
   const listeAuf = leisteOffen && listeAufRoh;
+  const ideeAuf = leisteOffen && ideen && ideeAufRoh;
   // Beim Schließen auch den Rohstand zurücksetzen, damit die Leiste beim
   // nächsten Öffnen wieder mit „Ansehen" beginnt. Während des Renderns statt
   // im Effekt (React: „Adjusting state when a prop changes").
@@ -159,6 +163,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       setModus("ansehen");
       setEntwurf(null);
       setListeAuf(false);
+      setIdeeAuf(false);
       setOffen(null);
     }
   }
@@ -234,6 +239,13 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     const antwort = await feedbackApi.laden();
     if (antwort.ok) setAlle(antwort.daten.anmerkungen);
   }, []);
+
+  // Der KI-Assistent legt Anmerkungen an (0.12.0) und meldet das per Ereignis.
+  useEffect(() => {
+    const beiNeu = () => void neuLaden();
+    window.addEventListener(NEU_LADEN, beiNeu);
+    return () => window.removeEventListener(NEU_LADEN, beiNeu);
+  }, [neuLaden]);
 
   useEffect(() => {
     notizenRef.current = notizen;
@@ -945,7 +957,36 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
         offeneAnzahl={offeneAnzahl}
         listeAuf={listeAuf}
         setListeAuf={setListeAuf}
+        ideen={ideen}
+        ideeAuf={ideeAuf}
+        setIdeeAuf={(auf) => {
+          setIdeeAuf(auf);
+          if (auf) {
+            setEntwurf(null);
+            setOffen(null);
+            setListeAuf(false);
+          }
+        }}
       />
+
+      {ideeAuf && (
+        <IdeeFeld
+          einstellung={einstellung}
+          personen={personen ?? []}
+          onAbbruch={() => setIdeeAuf(false)}
+          onSenden={async (idee, name) => {
+            if (!einstellung.ohneName && name.trim()) nameMerken(name);
+            const antwort = await feedbackApi.idee({ ...idee, seite: pfad });
+            if (!antwort.ok) {
+              setMeldung(antwort.fehler);
+              return false;
+            }
+            setIdeeAuf(false);
+            setMeldung("Idee an Lenny geschickt. Er entscheidet, ob daraus eine Aufgabe wird.");
+            return true;
+          }}
+        />
+      )}
 
       {listeAuf && (
         <SeitenListe
@@ -1024,6 +1065,9 @@ function Leiste(props: {
   offeneAnzahl: number;
   listeAuf: boolean;
   setListeAuf: (b: boolean) => void;
+  ideen: boolean;
+  ideeAuf: boolean;
+  setIdeeAuf: (b: boolean) => void;
 }) {
   // Gemerkt, weil die Leiste im Alltag stört und im Termin gebraucht wird —
   // beides soll man einmal einstellen, nicht auf jeder Seite. Standard: zu.
@@ -1243,6 +1287,18 @@ function Leiste(props: {
             Liste · {props.offeneAnzahl} offen
           </button>
 
+          {props.ideen && (
+            <button
+              type="button"
+              style={knopfStil}
+              aria-pressed={props.ideeAuf}
+              title="Eine Idee oder einen Wunsch an Lenny schicken — ohne bestimmte Stelle"
+              onClick={() => props.setIdeeAuf(!props.ideeAuf)}
+            >
+              Idee
+            </button>
+          )}
+
           {/* Ein echtes Kästchen, nur neu gezeichnet: Tastatur, Leertaste und
               Screenreader kommen vom Browser (styles.css, `.gcf-haken`). */}
           <label className="gcf-haken" style={{ ...knopfStil, color: props.zeigeErledigte ? T.text : T.leise }}>
@@ -1283,6 +1339,169 @@ function Leiste(props: {
 
 /** Wert der Auswahl „Jemand anderes …" — kein Name kann so heißen (Steuerzeichen). */
 const ANDERE = "\u0000andere";
+
+/**
+ * Eine Idee an Lenny (0.12.0): alles, was keine Änderung an einer bestimmten
+ * Stelle ist — neue Funktion, neue Seite, anderer Ablauf. Wird im Projektraum
+ * ein Vorschlag, über den Lenny entscheidet.
+ */
+function IdeeFeld(props: {
+  einstellung: OverlayModus;
+  personen: string[];
+  onAbbruch: () => void;
+  onSenden: (idee: Omit<NeueIdee, "seite">, name: string) => Promise<boolean>;
+}) {
+  const [titel, setTitel] = useState("");
+  const [beschreibung, setBeschreibung] = useState("");
+  const [name, setName] = useState(gespeicherterName);
+  const [laeuft, setLaeuft] = useState(false);
+  const mitNamen = !props.einstellung.ohneName && !props.einstellung.autorName;
+  const mitAuswahl = mitNamen && props.personen.length > 0;
+  const darf = Boolean(titel.trim()) && (!mitAuswahl || Boolean(name.trim())) && !laeuft;
+  const feldRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    feldRef.current?.focus();
+  }, []);
+
+  const feldStil: React.CSSProperties = {
+    width: "100%",
+    boxSizing: "border-box",
+    font: `400 14px/1.45 ${T.schrift}`,
+    color: T.text,
+    background: T.grund,
+    padding: 8,
+    border: `1px solid ${T.kante}`,
+    borderRadius: 6,
+  };
+
+  const senden = async () => {
+    if (!darf) return;
+    setLaeuft(true);
+    await props.onSenden({ titel: titel.trim(), beschreibung: beschreibung.trim() || null }, name);
+    setLaeuft(false);
+  };
+
+  return (
+    <aside
+      {...{ [OVERLAY_ATTR]: "" }}
+      role="dialog"
+      aria-labelledby="gcf-idee-titel"
+      style={{
+        position: "fixed",
+        left: "50%",
+        bottom: 96,
+        transform: "translateX(-50%)",
+        width: "min(340px, calc(100vw - 24px))",
+        zIndex: EBENE + 3,
+        background: T.flaeche,
+        color: T.text,
+        border: `1px solid ${T.kante}`,
+        borderRadius: 10,
+        padding: 12,
+        boxShadow: "0 8px 30px rgba(0,0,0,.2)",
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") props.onAbbruch();
+      }}
+    >
+      <p id="gcf-idee-titel" style={{ ...kleinStil, fontWeight: 600, color: T.text, marginBottom: 2 }}>
+        Idee an Lenny
+      </p>
+      <p style={{ ...kleinStil, marginBottom: 8 }}>
+        Neue Funktion, neue Seite, anderer Ablauf. Lenny entscheidet, ob daraus eine Aufgabe wird.
+      </p>
+      <label htmlFor="gcf-idee-kurz" className="gcf-sr">
+        Die Idee in einem Satz
+      </label>
+      <input
+        id="gcf-idee-kurz"
+        ref={feldRef}
+        value={titel}
+        maxLength={200}
+        placeholder="Die Idee in einem Satz"
+        onChange={(e) => setTitel(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void senden();
+          }
+        }}
+        style={feldStil}
+      />
+      <label htmlFor="gcf-idee-mehr" className="gcf-sr">
+        Mehr dazu (optional)
+      </label>
+      <textarea
+        id="gcf-idee-mehr"
+        value={beschreibung}
+        maxLength={4000}
+        rows={3}
+        placeholder="Mehr dazu (optional)"
+        onChange={(e) => setBeschreibung(e.target.value)}
+        style={{ ...feldStil, marginTop: 6, resize: "vertical" }}
+      />
+      {props.einstellung.hinweis && (
+        <p style={{ margin: "6px 0 0", font: `400 12px/1.4 ${T.schrift}`, color: T.leise }}>{props.einstellung.hinweis}</p>
+      )}
+      {mitAuswahl ? (
+        <>
+          <label htmlFor="gcf-idee-person" style={{ ...kleinStil, display: "block", marginTop: 8, marginBottom: 4 }}>
+            Wer sind Sie?
+          </label>
+          <select
+            id="gcf-idee-person"
+            value={props.personen.includes(name) ? name : ""}
+            onChange={(e) => setName(e.target.value)}
+            style={{ ...feldStil, font: `400 13px/1.4 ${T.schrift}`, padding: "6px 8px" }}
+          >
+            <option value="" disabled>
+              Bitte auswählen
+            </option>
+            {props.personen.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </>
+      ) : (
+        mitNamen &&
+        !gespeicherterName() && (
+          <input
+            aria-label="Ihr Name (optional)"
+            placeholder="Ihr Name (optional)"
+            value={name}
+            maxLength={120}
+            onChange={(e) => setName(e.target.value)}
+            style={{ ...feldStil, marginTop: 6, font: `400 13px/1.4 ${T.schrift}`, padding: "6px 8px" }}
+          />
+        )
+      )}
+      <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+        <button type="button" style={knopfStil} onClick={props.onAbbruch}>
+          Abbrechen
+        </button>
+        <button
+          type="button"
+          disabled={!darf}
+          onClick={() => void senden()}
+          style={{
+            ...knopfStil,
+            background: T.primaer,
+            color: T.primaerText,
+            border: "none",
+            fontWeight: 600,
+            opacity: darf ? 1 : 0.5,
+            cursor: darf ? "pointer" : "not-allowed",
+          }}
+        >
+          {laeuft ? "Schickt…" : "Abschicken"}
+        </button>
+      </div>
+    </aside>
+  );
+}
 
 /** Das Textfeld für einen neuen Kommentar, direkt an der geklickten Stelle. */
 function EntwurfsFeld(props: {

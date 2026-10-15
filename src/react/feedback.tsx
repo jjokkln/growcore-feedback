@@ -15,7 +15,14 @@ export function GrowcoreFeedback(props: {
   return (
     <>
       <AnmerkungsOverlay projekt={props.projekt} modus={props.modus} />
-      {props.kiHilfe && <KiHilfe projekt={props.projekt} ziele={props.ziele} vorschlaege={props.vorschlaege} />}
+      {props.kiHilfe && (
+        <KiHilfe
+          projekt={props.projekt}
+          ziele={props.ziele}
+          vorschlaege={props.vorschlaege}
+          datensparsam={props.modus?.datensparsam}
+        />
+      )}
     </>
   );
 }

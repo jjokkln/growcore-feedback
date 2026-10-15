@@ -2,11 +2,11 @@
 
 Feedback-Werkzeug für GrowCore-Projekte in Entwicklung: Anmerkungen in beide
 Richtungen (kommentieren, einkreisen, antworten, abhaken, als Text kopieren) und
-eine KI-Hilfe. Alles landet im zentralen Eingang des Projektraums — die
+einen KI-Assistenten. Alles landet im zentralen Eingang des Projektraums — die
 Kunden-App speichert nichts selbst.
 
 - `@growcore/feedback` — Typen, Verankerung, Export, Zielkatalog (framework-frei)
-- `@growcore/feedback/react` — Overlay, `?`-Knopf und KI-Hilfe (Client)
+- `@growcore/feedback/react` — Overlay, `?`-Knopf und KI-Assistent (Client)
 - `@growcore/feedback/next` — `feedbackRoute()`, `<FeedbackWerkzeug />` und `<FeedbackKnopf />` (Server)
 - `@growcore/feedback/styles.css`
 

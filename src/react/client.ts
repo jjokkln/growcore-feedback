@@ -5,7 +5,7 @@
  * ist der Nachweis „das ist meine Anmerkung" und wird nur an den eigenen
  * Server geschickt, nie an andere Besucher ausgeliefert.
  */
-import type { Anmerkung, KundenFarbe, NeueAnmerkung } from "../core/typen.ts";
+import type { Anmerkung, KundenFarbe, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
 
 const BASIS = "/api/feedback";
 const KENNUNG = "gcf-autor";
@@ -43,15 +43,20 @@ export function nameMerken(name: string): void {
 
 type Ergebnis<T> = { ok: true; daten: T } | { ok: false; fehler: string };
 
+/** Wer fragt — dieselben Kopfzeilen für jeden Aufruf der eigenen Route. */
+export function kopfzeilen(mitJson: boolean): Record<string, string> {
+  return {
+    ...(mitJson ? { "content-type": "application/json" } : {}),
+    "x-gcf-autor": kennung(),
+    "x-gcf-name": encodeURIComponent(gespeicherterName() || "Gast"),
+  };
+}
+
 async function rufe<T>(pfad: string, init: RequestInit = {}): Promise<Ergebnis<T>> {
   try {
     const antwort = await fetch(`${BASIS}${pfad}`, {
       ...init,
-      headers: {
-        ...(init.body ? { "content-type": "application/json" } : {}),
-        "x-gcf-autor": kennung(),
-        "x-gcf-name": encodeURIComponent(gespeicherterName() || "Gast"),
-      },
+      headers: kopfzeilen(Boolean(init.body)),
       cache: "no-store",
     });
     const daten = (await antwort.json().catch(() => ({}))) as T & { fehler?: string };
@@ -71,6 +76,8 @@ export const feedbackApi = {
   erledigt: (id: string, done: boolean) =>
     rufe<{ ok: true }>(`/anmerkungen/${id}`, { method: "PATCH", body: JSON.stringify({ done }) }),
   loeschen: (id: string) => rufe<{ ok: true }>(`/anmerkungen/${id}`, { method: "DELETE", body: "{}" }),
+  /** 0.12.0: eine Idee an Lenny (im Projektraum ein Vorschlag). */
+  idee: (idee: NeueIdee) => rufe<{ ok: true }>("/ideen", { method: "POST", body: JSON.stringify(idee) }),
   /** 0.9.0. Ältere Server kennen den Pfad nicht: dann `[]` und das freie Namensfeld. */
   personen: async (): Promise<string[]> => {
     const antwort = await rufe<{ personen?: unknown }>("/personen");

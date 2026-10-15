@@ -22,6 +22,18 @@ export function eingangBereit(): boolean {
   return Boolean(process.env.GROWCORE_FEEDBACK_KEY?.trim());
 }
 
+function fehlerAus(status: number, daten: { fehler?: string }): EingangFehler {
+  if (status === 401) console.error("[feedback] Schlüssel abgewiesen — GROWCORE_FEEDBACK_KEY prüfen.");
+  const neu = status === 401 ? 503 : status;
+  const text =
+    status === 401
+      ? "Das Feedback-Werkzeug ist nicht richtig eingerichtet."
+      : status === 429
+        ? (daten.fehler ?? "Gerade kommen sehr viele Anfragen an. Bitte in einer Stunde noch einmal versuchen.")
+        : (daten.fehler ?? "Das hat nicht geklappt.");
+  return new EingangFehler(neu, text);
+}
+
 export async function eingang<T>(
   pfad: string,
   init: { method: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown },
@@ -47,18 +59,41 @@ export async function eingang<T>(
   }
 
   const daten = (await antwort.json().catch(() => ({}))) as { fehler?: string };
-  if (!antwort.ok) {
-    if (antwort.status === 401) console.error("[feedback] Schlüssel abgewiesen — GROWCORE_FEEDBACK_KEY prüfen.");
-    const status = antwort.status === 401 ? 503 : antwort.status;
-    const text =
-      antwort.status === 401
-        ? "Das Feedback-Werkzeug ist nicht richtig eingerichtet."
-        : antwort.status === 429
-          ? "Gerade kommen sehr viele Anmerkungen an. Bitte in einer Stunde noch einmal versuchen."
-          : (daten.fehler ?? "Das hat nicht geklappt.");
-    throw new EingangFehler(status, text);
-  }
+  if (!antwort.ok) throw fehlerAus(antwort.status, daten);
   return daten as T;
+}
+
+/**
+ * Wie `eingang`, aber die Antwort ist ein Strom (0.12.0, KI-Assistent): Bei
+ * Erfolg kommt der Körper unverändert zurück, die Route reicht ihn durch.
+ */
+export async function eingangStrom(
+  pfad: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  const schluessel = process.env.GROWCORE_FEEDBACK_KEY?.trim();
+  if (!schluessel) throw new EingangFehler(503, "Das Feedback-Werkzeug ist nicht eingerichtet.");
+  const basis = (process.env.GROWCORE_FEEDBACK_URL?.trim() || STANDARD_URL).replace(/\/$/, "");
+
+  let antwort: Response;
+  try {
+    antwort = await fetch(`${basis}/api/feedback${pfad}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${schluessel}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal,
+    });
+  } catch (e) {
+    console.error("[feedback] Eingang nicht erreichbar:", e instanceof Error ? e.message : e);
+    throw new EingangFehler(502, "Der Assistent ist gerade nicht erreichbar.");
+  }
+  if (!antwort.ok || !antwort.body) {
+    const daten = (await antwort.json().catch(() => ({}))) as { fehler?: string };
+    throw fehlerAus(antwort.ok ? 502 : antwort.status, daten);
+  }
+  return antwort.body;
 }
 
 /**

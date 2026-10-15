@@ -82,7 +82,8 @@ test("ohne Sitzung 401 auf jeder Route, der Speicher wird nicht berührt", async
   const { GET, POST } = route();
   assert.equal((await GET(req("GET", "/anmerkungen"))).status, 401);
   assert.equal((await POST(req("POST", "/anmerkungen", NEU))).status, 401);
-  assert.equal((await POST(req("POST", "/ki-hilfe", { seite: "/", nachrichten: [] }))).status, 401);
+  assert.equal((await POST(req("POST", "/assistent", { seite: "/", nachrichten: [] }))).status, 401);
+  assert.equal((await POST(req("POST", "/ideen", { titel: "x" }))).status, 401);
   assert.deepEqual(aufrufe, []);
 });
 

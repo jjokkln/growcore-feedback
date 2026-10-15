@@ -1,16 +1,16 @@
 import {
   antwortSchema,
+  assistentEingabeSchema,
   autorSchema,
   erledigtSchema,
-  kiEingabeSchema,
+  ideeSchema,
   neueAnmerkungSchema,
   type Anmerkung,
   type Autor,
 } from "../core/typen.ts";
-import { systemAnweisung, type KiWissen } from "./anweisungen.ts";
+import { wissenFuerSammelstelle, type KiWissen } from "./anweisungen.ts";
 import { besucherKennung, bremse } from "./bremse.ts";
 import { EingangFehler } from "./eingang.ts";
-import { frageStreamen, KiFehler } from "./gemini.ts";
 import { eingangsSpeicher, type FeedbackSpeicher, type Zeile } from "./speicher.ts";
 
 /**
@@ -27,18 +27,20 @@ import { eingangsSpeicher, type FeedbackSpeicher, type Zeile } from "./speicher.
  * 1. **Eingeschaltet?** `FEEDBACK=1`, sonst 404 — die Route gibt es dann nicht.
  *    Dazu (0.7.0) der Schalter bei der Sammelstelle (`speicher.status()`,
  *    30 s gemerkt): aus → jeder Pfad 404, `GET /status` sagt `{ an: false }`.
- *    Die KI-Hilfe braucht zusätzlich `KI_HILFE=1`.
+ *    Der KI-Assistent (0.12.0) braucht zusätzlich `KI_HILFE=1`, das Wissen
+ *    (`ki`) und einen Speicher mit `assistent`; `GET /status` meldet, ob er
+ *    und der Knopf „Idee“ da sind.
  * 2. **Wer?** Kein Konto: Der Browser schickt eine selbst erzeugte Kennung
  *    (`x-gcf-autor`) und einen Namen (`x-gcf-name`). Die Kennung ist der
  *    Nachweis für „eigene Anmerkung löschen" und verlässt diesen Server nie
  *    in Richtung anderer Besucher (`zuBrowser`).
- * 3. **Wie viel?** Je Besucher 40 Schreibvorgänge und 20 KI-Fragen je Stunde;
- *    die Grenze je Projekt setzt der Eingang.
+ * 3. **Wie viel?** Je Besucher 40 Schreibvorgänge und 30 Fragen an den
+ *    Assistenten je Stunde; die Grenzen je Projekt setzt der Eingang.
  * 4. **Was?** zod, dieselben Grenzen wie im Eingang.
  */
 
 export interface FeedbackRouteOptionen {
-  /** Ohne `ki` gibt es keine KI-Hilfe, auch nicht mit `KI_HILFE=1`. */
+  /** Ohne `ki` gibt es keinen KI-Assistenten, auch nicht mit `KI_HILFE=1`. */
   ki?: KiWissen;
   /**
    * Eigener Speicher statt des Eingangs im Projektraum. Für Projekte, deren
@@ -114,6 +116,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
   const an = () => process.env.FEEDBACK === "1";
   const speicher = optionen.speicher ?? eingangsSpeicher;
+  const assistentAn = () => Boolean(optionen.ki && speicher.assistent && process.env.KI_HILFE === "1");
   /** Mit Konto zählt das Konto, sonst die Kennung des Browsers. */
   const wer = async (request: Request): Promise<Autor | null> =>
     optionen.identitaet ? optionen.identitaet(request) : autorAus(request);
@@ -147,8 +150,10 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     const [bereich, id, unter] = segmente(request);
 
     if (bereich === "status" && !id && methode === "GET") {
-      // Ohne Anmeldung beantwortbar: Es verrät nur, ob das `?` erscheinen soll.
-      return json({ an: await zentralAn() });
+      // Ohne Anmeldung beantwortbar: Es verrät nur, ob das `?` erscheinen soll,
+      // und welche Teile (0.12.0) — Assistent und „Idee“ hängen am Speicher.
+      if (!(await zentralAn())) return json({ an: false });
+      return json({ an: true, assistent: assistentAn(), ideen: Boolean(speicher.idee) });
     }
     if (!(await zentralAn())) return fehler(404, "Das Feedback-Werkzeug ist ausgeschaltet.");
 
@@ -158,7 +163,8 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
       if (bereich === "anmerkungen") return await anmerkungen(request, methode, id, unter, autor);
       // Erst nach Schalter und Identität: Die Namen sieht nur, wer das Werkzeug auch benutzen darf.
       if (bereich === "personen" && methode === "GET" && !id) return json({ personen: await personenListe() });
-      if (bereich === "ki-hilfe" && methode === "POST" && !id) return await kiHilfe(request, autor);
+      if (bereich === "assistent" && methode === "POST" && !id) return await assistent(request, autor);
+      if (bereich === "ideen" && methode === "POST" && !id) return await idee(request, autor);
       return fehler(404, "Nicht gefunden.");
     } catch (e) {
       if (e instanceof EingangFehler) return fehler(e.status, e.message);
@@ -212,61 +218,46 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     return fehler(404, "Nicht gefunden.");
   }
 
-  async function kiHilfe(request: Request, autor: Autor | null): Promise<Response> {
+  async function assistent(request: Request, autor: Autor | null): Promise<Response> {
     const ki = optionen.ki;
-    if (!ki || process.env.KI_HILFE !== "1") return fehler(503, "Die KI-Hilfe ist nicht eingeschaltet.");
-    if (!bremse(`ki:${schluessel(request, autor)}`, 20, 3_600_000)) {
+    if (!ki || !speicher.assistent || process.env.KI_HILFE !== "1") {
+      return fehler(503, "Der KI-Assistent ist nicht eingeschaltet.");
+    }
+    if (!bremse(`ki:${schluessel(request, autor)}`, 30, 3_600_000)) {
       return fehler(429, "Das waren viele Fragen in kurzer Zeit. Bitte in einer Stunde wieder versuchen.");
     }
-
-    const eingabe = kiEingabeSchema.safeParse(await leseJson(request));
+    const eingabe = assistentEingabeSchema.safeParse(await leseJson(request));
     if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Anfrage.");
-    const { seite, nachrichten } = eingabe.data;
-    const frage = nachrichten[nachrichten.length - 1]?.text ?? "";
 
-    // Erst melden, dann fragen: Jede Frage gehört in den Eingang (DECISIONS
-    // 2026-09-28a), und der Eingang ist zugleich die Bremse je Projekt.
-    // Scheitert die Meldung, wird nicht gefragt.
-    await speicher.kiFrage?.(frage, seite, autor);
-
-    let stuecke: AsyncGenerator<string>;
-    try {
-      stuecke = await frageStreamen(systemAnweisung(ki, seite), nachrichten, request.signal);
-    } catch (e) {
-      const status = e instanceof KiFehler ? e.status : 0;
-      console.error("[ki] Anfrage gescheitert:", status, e instanceof Error ? e.message : e);
-      return new Response("Die KI hat gerade nicht geantwortet. Bitte gleich noch einmal versuchen.", {
-        status: 502,
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      });
-    }
-
-    const kodierer = new TextEncoder();
-    const strom = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        let ausgabe = 0;
-        try {
-          for await (const stueck of stuecke) {
-            ausgabe += stueck.length;
-            controller.enqueue(kodierer.encode(stueck));
-          }
-          if (ausgabe === 0) controller.enqueue(kodierer.encode("Dazu habe ich gerade keine Antwort."));
-        } catch (e) {
-          console.error("[ki] Strom abgebrochen:", e instanceof Error ? e.message : e);
-          controller.enqueue(kodierer.encode("\n\n(Die Antwort wurde unterbrochen.)"));
-        } finally {
-          controller.close();
-        }
+    // Die Sammelstelle hält die Frage fest, zählt die Kosten und antwortet als
+    // NDJSON. Fehler VOR dem Strom kommen als EingangFehler (→ JSON mit Satz).
+    const strom = await speicher.assistent(
+      {
+        ...eingabe.data,
+        autor: autor && autor.label !== "Gast" ? autor.label : null,
+        wissen: wissenFuerSammelstelle(ki),
       },
-    });
-
+      request.signal,
+    );
     return new Response(strom, {
       headers: {
-        "content-type": "text/plain; charset=utf-8",
+        "content-type": "application/x-ndjson; charset=utf-8",
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       },
     });
+  }
+
+  async function idee(request: Request, autor: Autor | null): Promise<Response> {
+    if (!speicher.idee) return fehler(404, "Nicht gefunden.");
+    if (!autor) return fehler(400, "Ohne Kennung lässt sich nichts speichern. Bitte die Seite neu laden.");
+    if (!bremse(`schreiben:${schluessel(request, autor)}`, 40, 3_600_000)) {
+      return fehler(429, "Das waren viele Einträge in kurzer Zeit. Bitte etwas später weitermachen.");
+    }
+    const eingabe = ideeSchema.safeParse(await leseJson(request));
+    if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Idee.");
+    await speicher.idee(eingabe.data, autor);
+    return json({ ok: true }, 201);
   }
 
   return {
