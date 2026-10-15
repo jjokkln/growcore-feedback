@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 import { leseEreignis, type IdeeEingabe, type MarkierenEingabe } from "../core/assistent.ts";
 import { leseAntwort, type Schritt } from "../core/ki-antwort.ts";
+import { ALLE_SEITEN } from "../core/konstanten.ts";
 import type { KiNachricht } from "../core/typen.ts";
 import type { ZielKatalog } from "../core/ziele.ts";
 import { feedbackApi, gespeicherterName, kopfzeilen, nameMerken } from "./client.ts";
@@ -112,7 +113,7 @@ type KiHilfeProps = {
   projekt: string;
   ziele: ZielKatalog;
   vorschlaege: string[];
-  /** „du“ oder „Sie“ (Standard) — wie `anrede` in `KiWissen` (0.10.0). */
+  /** „du“ (Standard seit 0.14.0) oder „Sie“ — wie `anrede` in `KiWissen`. */
   anrede?: "du" | "Sie";
   /**
    * Erste Nachricht der KI (0.10.0). Muss sagen, dass hier eine KI antwortet
@@ -139,10 +140,9 @@ export function KiHilfe(props: KiHilfeProps) {
 }
 
 function KiHilfeInnen({
-  projekt,
   ziele,
   vorschlaege,
-  anrede = "Sie",
+  anrede = "du",
   begruessung: eigeneBegruessung,
   datensparsam = false,
 }: KiHilfeProps) {
@@ -167,11 +167,12 @@ function KiHilfeInnen({
   const bekannt = (id: string) => id in ziele;
   const zugestimmt = einwilligung === EINWILLIGUNG_STAND;
 
+  // Kurz (Lenny, 2026-10-15). Was nicht fehlen darf: dass hier eine KI antwortet.
   const begruessung =
     eigeneBegruessung ??
     (du
-      ? `Hallo! Ich bin der KI-Assistent zur ${projekt} – eine künstliche Intelligenz, kein Mensch. Ich erkläre dir die Seite, beantworte Fragen zum Stand des Projekts, kreise auf Wunsch Stellen ein und gebe deine Ideen an Lenny weiter. Ich kann mich irren.`
-      : `Guten Tag! Ich bin der KI-Assistent zur ${projekt} – eine künstliche Intelligenz, kein Mensch. Ich erkläre Ihnen die Seite, beantworte Fragen zum Stand des Projekts, kreise auf Wunsch Stellen ein und gebe Ihre Ideen an Lenny weiter. Ich kann mich irren.`);
+      ? "Hi! Ich bin eine KI, kein Mensch. Frag mich zur Seite oder zum Projekt – oder sag mir, was du ändern willst."
+      : "Guten Tag! Ich bin eine KI, kein Mensch. Fragen Sie mich zur Seite oder zum Projekt – oder sagen Sie mir, was Sie ändern möchten.");
 
   useEffect(() => {
     try {
@@ -297,9 +298,10 @@ function KiHilfeInnen({
         setze("fehler", "Die Stelle ist nicht mehr auf der Seite. Bitte noch einmal fragen.");
         return;
       }
+      const { global, ...markierung } = markierungFuer(el, datensparsam);
       const antwort = await feedbackApi.anlegen({
-        ...markierungFuer(el, datensparsam),
-        path: seite,
+        ...markierung,
+        path: global ? ALLE_SEITEN : seite,
         shape: "stroke",
         body: v.eingabe.notiz,
         color: v.eingabe.farbe,

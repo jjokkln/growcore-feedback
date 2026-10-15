@@ -25,7 +25,7 @@ export function alsMarkdown(notizen: Anmerkung[], titel = "Anmerkungen"): string
   const seiten = [...new Set(ohneRundgang.map((n) => n.path))].sort();
 
   for (const pfad of seiten) {
-    zeilen.push(`## ${pfad}`, "");
+    zeilen.push(`## ${pfad === "/*" ? "Alle Seiten (Kopf- und Fußbereich)" : pfad}`, "");
     for (const n of ohneRundgang.filter((x) => x.path === pfad)) {
       const haken = n.done ? "x" : " ";
       const wortlaut =

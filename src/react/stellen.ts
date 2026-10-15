@@ -13,6 +13,7 @@ import type { Stelle } from "../core/assistent.ts";
 import {
   OVERLAY_ATTR,
   ankerLabel,
+  istSeitenweit,
   kuerze,
   selektorPfad,
   zuAnkerAnteil,
@@ -190,7 +191,15 @@ function rechteck(box: DOMRect): Punkt[] {
 export function markierungFuer(
   el: Element,
   datensparsam = false,
-): { anchor_selector: string; anchor_label: string; points: Punkt[]; fallback: Punkt[]; viewport_width: number } {
+): {
+  anchor_selector: string;
+  anchor_label: string;
+  points: Punkt[];
+  fallback: Punkt[];
+  viewport_width: number;
+  /** Im seitenweiten Kopf- oder Fußbereich: gilt auf allen Seiten (0.14.0). */
+  global: boolean;
+} {
   const box = el.getBoundingClientRect();
   const gross = box.width > window.innerWidth * 0.7 || box.height > window.innerHeight * 0.7;
   const viewport = gross && box.width > 40 && box.height > 40 ? rechteck(box) : ellipse(box);
@@ -205,5 +214,6 @@ export function markierungFuer(
     }),
     fallback: viewport.map((p) => zuDokumentAnteil(p.x, p.y)),
     viewport_width: Math.max(200, Math.min(8000, Math.round(window.innerWidth))),
+    global: istSeitenweit(el),
   };
 }

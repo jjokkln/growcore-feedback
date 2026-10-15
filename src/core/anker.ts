@@ -46,6 +46,21 @@ export function kuerze(wert: string, max: number): string {
   return sauber.length <= max ? sauber : `${sauber.slice(0, max - 1).trimEnd()}…`;
 }
 
+/**
+ * Liegt das Element im seitenweiten Kopf- oder Fußbereich (0.14.0)? Gemeint
+ * sind `header`, `footer` und `nav` außerhalb von `main`, `article`, `section`,
+ * `aside` und `dialog` — ein `header` in einem Artikel gehört zur Seite. Ein
+ * Projekt kann einen Bereich ausdrücklich mit `data-review-global` markieren.
+ */
+export function istSeitenweit(element: Element | null): boolean {
+  const bereich = element?.closest(
+    "[data-review-global], body > header, body > footer, footer, header, nav, [role=banner], [role=contentinfo]",
+  );
+  if (!bereich) return false;
+  if (bereich.hasAttribute("data-review-global")) return true;
+  return !bereich.parentElement?.closest("main, article, section, aside, dialog, [role=main], [role=dialog]");
+}
+
 /** Zum angeklickten Element die nächste sinnvolle Bezugseinheit. */
 export function sektionsWurzel(element: Element | null): Element | null {
   let aktuell: Element | null = element;

@@ -11,6 +11,7 @@ import {
   ausduennen,
   elementUnter,
   findeAnker,
+  istSeitenweit,
   sektionsWurzel,
   selektorPfad,
   stellenLabel,
@@ -19,7 +20,7 @@ import {
 } from "../core/anker.ts";
 import { alsMarkdown } from "../core/export.ts";
 import { glaetteZug, type Form } from "../core/form.ts";
-import { ART_LABEL, FARBNAME, FARBWERT, KUNDEN_FARBEN, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
+import { ALLE_SEITEN, ART_LABEL, FARBNAME, FARBWERT, KUNDEN_FARBEN, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
 // Nur Typen: zod bleibt aus dem Browser-Bündel.
 import type { Anmerkung, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
@@ -74,6 +75,8 @@ type Entwurf = {
   anchor_selector: string;
   anchor_label: string;
   zug?: { points: Punkt[]; fallback: Punkt[] };
+  /** Im seitenweiten Kopf- oder Fußbereich: gilt auf allen Seiten (0.14.0). */
+  global?: boolean;
   /**
    * Geglättet (0.13.0): Aus dem Gekritzel wurde eine Ellipse oder ein Rechteck.
    * `freihand` hält den Zug, wie er gezeichnet wurde — „Freihand zurück“ tauscht.
@@ -143,7 +146,12 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
 
   /** Alle Anmerkungen des Projekts; die Seite zeigt ihre, der Export alle. */
   const [alle, setAlle] = useState<Anmerkung[]>([]);
-  const notizen = alle.filter((n) => normPfad(n.path) === pfad);
+  // Dazu die seitenweiten (Kopf- und Fußbereich, `/*`) — ohne Notnagel: Der
+  // Dokument-Anteil stammt von der Seite, auf der gezeichnet wurde, und wäre auf
+  // jeder anderen falsch. Ohne gefundenen Anker stehen sie nur in der Liste.
+  const notizen = alle
+    .filter((n) => normPfad(n.path) === pfad || n.path === ALLE_SEITEN)
+    .map((n) => (n.path === ALLE_SEITEN && n.fallback.length ? { ...n, fallback: [] } : n));
   const [modusRoh, setModus] = useState<Modus>("ansehen");
   const [farbe, setFarbe] = useState<KundenFarbe>("rot");
   const [zeigeErledigte, setZeigeErledigte] = useState(false);
@@ -293,12 +301,43 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       el.style.pointerEvents = "none";
     };
 
+    /**
+     * Liegt gerade ein anderes Element der Seite über der Stelle? (0.14.0)
+     * Bei Parallax und „Vorhang“-Effekten liegt ein Bereich dauerhaft unter
+     * dem Rest (Corpus Contour, 2026-10-15); seine Marken standen dann quer
+     * über fremdem Inhalt. Geprüft wird ein Punkt in der Ankerbox, auf den
+     * sichtbaren Ausschnitt geklemmt: Ist das oberste Element dort weder der
+     * Anker noch in ihm noch um ihn herum, ist die Stelle verdeckt.
+     */
+    const istVerdeckt = (selektor: string, probe: Punkt): boolean => {
+      const anker = findeAnker(selektor);
+      if (!anker) return false;
+      const box = anker.getBoundingClientRect();
+      const links = Math.max(box.left, 0) + 2;
+      const rechts = Math.min(box.right, window.innerWidth) - 2;
+      const oben = Math.max(box.top, 0) + 2;
+      const unten = Math.min(box.bottom, window.innerHeight) - 2;
+      if (links > rechts || oben > unten) return false;
+      const x = Math.min(Math.max(probe.x, links), rechts);
+      const y = Math.min(Math.max(probe.y, oben), unten);
+      const oberstes = document
+        .elementsFromPoint(x, y)
+        .find((el) => !el.closest(`[${OVERLAY_ATTR}],[data-ki-ui]`));
+      if (!oberstes) return false;
+      return !anker.contains(oberstes) && !oberstes.contains(anker);
+    };
+    /** Ergebnis je Anmerkung, höchstens alle 150 ms neu: Treffertests kosten Layout. */
+    const verdeckt = new Map<string, boolean>();
+    let geprueft = 0;
+
     const setzen = () => {
       const offenId = offenRef.current;
       const fenster = document.querySelector<HTMLElement>("[data-anmerkung-fenster]");
       // Erst alle Positionen schreiben, dann die Linien messen: so kostet
       // ein Bild genau ein Layout, nicht eins je Zettel.
       const linien: { id: string; p: Versatz; ziel: HTMLElement | null }[] = [];
+      const neuPruefen = performance.now() - geprueft > 150;
+      if (neuPruefen) geprueft = performance.now();
 
       for (const notiz of notizenRef.current) {
         const knoten = markenRef.current.get(notiz.id);
@@ -314,6 +353,22 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
           continue;
         }
         const { punkte, verankert } = lage;
+        if (neuPruefen) {
+          const probe =
+            notiz.shape === "pin"
+              ? punkte[0]
+              : (() => {
+                  const r = rahmenVon(punkte);
+                  return { x: (r.links + r.rechts) / 2, y: (r.oben + r.unten) / 2 };
+                })();
+          verdeckt.set(notiz.id, verankert && istVerdeckt(notiz.anchor_selector, probe));
+        }
+        if (verdeckt.get(notiz.id) && offenId !== notiz.id) {
+          verstecke(knoten);
+          if (zettel) verstecke(zettel);
+          linien.push({ id: notiz.id, p: { x: 0, y: 0 }, ziel: null });
+          continue;
+        }
         const absetz = punkte[punkte.length - 1];
         const ziel = offenId === notiz.id ? fenster : (zettel ?? null);
         linien.push({ id: notiz.id, p: absetz, ziel });
@@ -329,6 +384,8 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
         } else {
           const g = knoten as SVGGElement;
           g.style.opacity = "1";
+          // `verstecke` nimmt die Trefferfläche weg; sichtbar gibt es sie zurück.
+          g.style.pointerEvents = "stroke";
           const d = alsPfad(punkte);
           for (const kind of Array.from(g.children)) {
             (kind as SVGPathElement).setAttribute("d", d);
@@ -477,6 +534,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     return {
       anchor_selector: selektorPfad(anker) || "body",
       anchor_label: stellenLabel(getroffen, anker, einstellung.datensparsam),
+      global: istSeitenweit(anker),
       points: punkte.map((p) => zuAnkerAnteil(p.x, p.y, box)),
       fallback: punkte.map((p) => zuDokumentAnteil(p.x, p.y)),
     };
@@ -521,6 +579,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       y: e.clientY,
       anchor_selector: selektorPfad(anker) || "body",
       anchor_label: stellenLabel(getroffen, anker, einstellung.datensparsam),
+      global: istSeitenweit(anker),
     });
   };
 
@@ -539,7 +598,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     if (!einstellung.ohneName) nameMerken(name);
 
     const gemeinsam = {
-      path: pfad,
+      path: entwurf.global ? ALLE_SEITEN : pfad,
       anchor_selector: entwurf.anchor_selector,
       anchor_label: entwurf.anchor_label,
       color: farbe,
@@ -623,6 +682,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
         y: oben.y,
         anchor_selector: geglaettet.anchor_selector,
         anchor_label: geglaettet.anchor_label,
+        global: geglaettet.global,
         zug: form,
         form: glatt.form,
         geglaettet: form,
@@ -632,8 +692,8 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     }
 
     const ende = zug[zug.length - 1];
-    const { anchor_selector, anchor_label, points, fallback } = verankere(zug);
-    setEntwurf({ x: ende.x, y: ende.y, anchor_selector, anchor_label, zug: { points, fallback } });
+    const { anchor_selector, anchor_label, global, points, fallback } = verankere(zug);
+    setEntwurf({ x: ende.x, y: ende.y, anchor_selector, anchor_label, global, zug: { points, fallback } });
   };
 
   // ── Verschieben ──────────────────────────────────────────────────────────
@@ -915,7 +975,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
             {n.body ?? "✎ ohne Text"}
             {n.replies.some((a) => a.from_agency) && !n.from_agency && (
               <span style={{ display: "block", marginTop: 3, color: T.leise, fontWeight: 600 }}>
-                ↳ Antwort von GrowCore
+                ↳ Antwort von Lenny
               </span>
             )}
           </button>
@@ -1069,7 +1129,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
           nummerVon={nummerVon}
           onSchliessen={() => setListeAuf(false)}
           onSpringen={(n) => {
-            if (normPfad(n.path) !== pfad) {
+            if (n.path !== ALLE_SEITEN && normPfad(n.path) !== pfad) {
               setOffen(null);
               setSprung(n);
               router.push(n.path);
@@ -1657,6 +1717,9 @@ function EntwurfsFeld(props: {
         {props.entwurf.zug ? "Eingekreist · " : ""}
         {props.entwurf.anchor_label}
       </p>
+      {props.entwurf.global && (
+        <p style={{ ...kleinStil, marginTop: -2, marginBottom: 6 }}>Kopf- oder Fußbereich: steht auf allen Seiten.</p>
+      )}
       {props.onFormTauschen && (
         <p style={{ ...kleinStil, marginTop: -2, marginBottom: 6 }}>
           {props.entwurf.zug === props.entwurf.geglaettet
@@ -1930,7 +1993,7 @@ function NotizFenster(props: {
             <li key={a.id}>
               <p style={{ font: `400 13px/1.45 ${T.schrift}`, margin: 0, whiteSpace: "pre-wrap" }}>{a.body}</p>
               <span style={kleinStil}>
-                {a.from_agency ? "GrowCore" : (a.author_label ?? "Gast")} · {zeit(a.created_at)}
+                {a.from_agency ? "Lenny" : (a.author_label ?? "Gast")} · {zeit(a.created_at)}
               </span>
             </li>
           ))}
@@ -2117,7 +2180,7 @@ function SeitenListe(props: {
             <section key={seite} style={{ marginBottom: 12 }}>
               {bereich === "alle" && (
                 <h3 style={{ ...kleinStil, fontWeight: 600, margin: "0 0 6px" }}>
-                  {seite === props.pfad ? `${seite} (hier)` : seite}
+                  {seite === ALLE_SEITEN ? "Alle Seiten (Kopf- und Fußbereich)" : seite === props.pfad ? `${seite} (hier)` : seite}
                 </h3>
               )}
               <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 6 }}>

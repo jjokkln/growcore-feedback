@@ -35,8 +35,15 @@ export type Art = (typeof ARTEN)[number];
 
 export const ART_LABEL: Record<Art, string> = {
   note: "Anmerkung",
-  question: "Frage von GrowCore",
-  hint: "Hinweis von GrowCore",
+  question: "Frage von Lenny",
+  hint: "Hinweis von Lenny",
   changed: "Geändert – bitte prüfen",
 };
 
+
+/**
+ * Pfad einer Anmerkung, die auf JEDER Seite gilt (0.14.0): Stellen im
+ * seitenweiten Kopf- oder Fußbereich sehen auf allen Seiten gleich aus, also
+ * soll die Anmerkung dort auch überall stehen (Lenny, 2026-10-15).
+ */
+export const ALLE_SEITEN = "/*";
