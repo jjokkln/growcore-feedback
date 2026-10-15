@@ -37,7 +37,7 @@ function Knopf({ className }: { className?: string }) {
   const beschriftung = offen
     ? "Anmerkungen schließen"
     : `Anmerkungen öffnen${offeneAnzahl > 0 ? `, ${offeneAnzahl} offen auf dieser Seite` : ""}${
-        fragen > 0 ? `, davon ${fragen} ${fragen === 1 ? "Frage" : "Fragen"} von Lenny an Sie` : ""
+        fragen > 0 ? `, davon ${fragen} ${fragen === 1 ? "Frage" : "Fragen"} an Sie` : ""
       }`;
 
   return (

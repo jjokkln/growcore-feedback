@@ -22,7 +22,7 @@ import {
 } from "../core/anker.ts";
 import { alsMarkdown } from "../core/export.ts";
 import { glaetteZug, type Form } from "../core/form.ts";
-import { ALLE_SEITEN, ART_LABEL, FARBNAME, FARBWERT, KUNDEN_FARBEN, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
+import { ALLE_SEITEN, FARBNAME, FARBWERT, KUNDEN_FARBEN, agenturArt, vorname, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
 // Nur Typen: zod bleibt aus dem Browser-Bündel.
 import type { Anmerkung, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
 import { agenturAbmelden, useAgentur, type Agentur } from "./agentur.ts";
@@ -131,7 +131,7 @@ function normPfad(pfad: string | null): string {
 
 /** Was über einer Anmerkung steht — sagt, von wem sie ist. */
 function wer(n: Anmerkung): string {
-  if (n.from_agency) return ART_LABEL[n.kind];
+  if (n.from_agency) return agenturArt(n.kind, n.author_label);
   if (n.eigen) return "Ihre Anmerkung";
   return `Anmerkung von ${n.author_label ?? "Gast"}`;
 }
@@ -1009,13 +1009,13 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
                 // Text in Vordergrundfarbe, nicht in Blau: Blau auf dem dunklen
                 // Grund fällt unter 4,5:1 (axe, 27.09.2026). Die Farbe trägt
                 // der linke Rand.
-                <strong style={{ fontWeight: 600 }}>{ART_LABEL[n.kind]}: </strong>
+                <strong style={{ fontWeight: 600 }}>{agenturArt(n.kind, n.author_label)}: </strong>
               )}
               {n.body ?? "✎ ohne Text"}
             </span>
             {n.replies.some((a) => a.from_agency) && !n.from_agency && (
               <span style={{ display: "block", marginTop: 3, color: T.leise, fontWeight: 600 }}>
-                ↳ Antwort von Lenny
+                ↳ Antwort von {vorname(n.replies.find((a) => a.from_agency)?.author_label) ?? "Lenny"}
               </span>
             )}
           </button>
@@ -1551,7 +1551,7 @@ function Leiste(props: {
           <button
             type="button"
             onClick={() => {
-              if (window.confirm("Als Lenny abmelden? In diesem Browser zeichnest du danach wieder als Besucher.")) agenturAbmelden();
+              if (window.confirm(`Als ${vorname(props.lenny?.name) ?? "Lenny"} abmelden? In diesem Browser zeichnest du danach wieder als Besucher.`)) agenturAbmelden();
             }}
             title={`Angemeldet als ${props.lenny.name} bis ${new Date(props.lenny.bis).toLocaleDateString("de-DE")} · Klicken zum Abmelden`}
             style={{
@@ -1562,7 +1562,7 @@ function Leiste(props: {
               fontWeight: 600,
             }}
           >
-            Als Lenny ✕
+            Als {vorname(props.lenny.name) ?? "Lenny"} ✕
           </button>
         )}
 

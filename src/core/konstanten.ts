@@ -40,6 +40,22 @@ export const ART_LABEL: Record<Art, string> = {
   changed: "Geändert – bitte prüfen",
 };
 
+/** Der Vorname aus einer Beschriftung wie „Lenny (Lenny Helps)“ (0.16.6). */
+export function vorname(label: string | null | undefined): string | null {
+  return label?.trim().split(/[\s(]/)[0] || null;
+}
+
+/**
+ * Was über einer Anmerkung der Agentur steht (0.16.6): „Frage von <Vorname>“
+ * statt fest „von Lenny“. In Galdora fragt das Galdora-Team, nicht Lenny.
+ */
+export function agenturArt(kind: Art, autor: string | null | undefined): string {
+  const name = vorname(autor) ?? "Lenny";
+  if (kind === "question") return `Frage von ${name}`;
+  if (kind === "hint") return `Hinweis von ${name}`;
+  return ART_LABEL[kind];
+}
+
 
 /**
  * Pfad einer Anmerkung, die auf JEDER Seite gilt (0.14.0): Stellen im

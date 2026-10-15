@@ -1,5 +1,5 @@
 /** Anmerkungen als Markdown — die Arbeitsliste nach einem Durchgang. */
-import { ART_LABEL } from "./konstanten.ts";
+import { ART_LABEL, agenturArt } from "./konstanten.ts";
 import type { Anmerkung } from "./typen.ts";
 
 function datum(iso: string): string {
@@ -31,7 +31,7 @@ export function alsMarkdown(notizen: Anmerkung[], titel = "Anmerkungen"): string
       const wortlaut =
         n.body?.trim().replace(/\n/g, " ") ||
         (n.shape === "stroke" ? "_(nur eingekreist — ohne Text)_" : "");
-      const wer = n.from_agency ? ART_LABEL[n.kind] : `${ART_LABEL[n.kind]} von ${n.author_label ?? "Gast"}`;
+      const wer = n.from_agency ? agenturArt(n.kind, n.author_label) : `${ART_LABEL[n.kind]} von ${n.author_label ?? "Gast"}`;
       zeilen.push(`- [${haken}] **${n.anchor_label}** · ${wer} — ${wortlaut}  `);
       zeilen.push(
         `      _${datum(n.created_at)}${n.viewport_width ? `, ${n.viewport_width} px breit` : ""} · id ${n.id}_`,
