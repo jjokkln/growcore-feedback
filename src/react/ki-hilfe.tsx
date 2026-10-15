@@ -122,6 +122,11 @@ type KiHilfeProps = {
   begruessung?: string;
   /** Seiten mit Personendaten: Stellen nur aus `data-review-anker` (0.12.0). */
   datensparsam?: boolean;
+  /**
+   * Der Name kommt aus dem Konto der App (wie `modus.ohneName` am Overlay):
+   * Die Einwilligung fragt dann nicht danach (0.16.5).
+   */
+  ohneName?: boolean;
 };
 
 /**
@@ -145,6 +150,7 @@ function KiHilfeInnen({
   anrede = "du",
   begruessung: eigeneBegruessung,
   datensparsam = false,
+  ohneName = false,
 }: KiHilfeProps) {
   const seite = normPfad(usePathname());
   const du = anrede === "du";
@@ -396,7 +402,7 @@ function KiHilfeInnen({
           </div>
 
           {!zugestimmt ? (
-            <Einwilligung du={du} onJa={() => setEinwilligung(EINWILLIGUNG_STAND)} />
+            <Einwilligung du={du} datensparsam={datensparsam} ohneName={ohneName} onJa={() => setEinwilligung(EINWILLIGUNG_STAND)} />
           ) : (
             <>
               <div ref={listeRef} role="log" aria-live="polite" aria-busy={laeuft} className="gcf-ki-liste">
@@ -494,11 +500,22 @@ function KiHilfeInnen({
  * Vor der ersten Frage: wohin die Fragen gehen, und unter welchem Namen
  * Anmerkungen und Ideen ankommen. Der Name ist derselbe wie im Overlay.
  */
-function Einwilligung({ du, onJa }: { du: boolean; onJa: () => void }) {
+function Einwilligung({
+  du,
+  datensparsam,
+  ohneName,
+  onJa,
+}: {
+  du: boolean;
+  datensparsam: boolean;
+  ohneName: boolean;
+  onJa: () => void;
+}) {
   const [personen, setPersonen] = useState<string[] | null>(null);
   const [name, setName] = useState(gespeicherterName);
 
   useEffect(() => {
+    if (ohneName) return;
     let aktiv = true;
     void feedbackApi.personen().then((liste) => {
       if (aktiv) setPersonen(liste);
@@ -506,9 +523,9 @@ function Einwilligung({ du, onJa }: { du: boolean; onJa: () => void }) {
     return () => {
       aktiv = false;
     };
-  }, []);
+  }, [ohneName]);
 
-  const mitAuswahl = (personen?.length ?? 0) > 0;
+  const mitAuswahl = !ohneName && (personen?.length ?? 0) > 0;
   const darf = !mitAuswahl || Boolean(name.trim());
 
   return (
@@ -517,13 +534,13 @@ function Einwilligung({ du, onJa }: { du: boolean; onJa: () => void }) {
         <p className="gcf-absatz">
           {du ? "Bevor du fragst: " : "Bevor Sie fragen: "}
           Der KI-Assistent ist eine künstliche Intelligenz (Claude von Anthropic). {du ? "Deine" : "Ihre"} Nachrichten, die aktuelle Seite und die
-          Beschriftungen auf der Seite gehen dafür an den Projektraum von Lenny Helps und von dort an Anthropic in den USA. Die
-          Frage wird 30 Tage aufbewahrt, die Antwort nicht.
+          {datensparsam ? " Namen der markierten Bereiche (kein Seitentext)" : " Beschriftungen auf der Seite"} gehen dafür an den Projektraum
+          von Lenny Helps und von dort an Anthropic in den USA. Die Frage wird 30 Tage aufbewahrt, die Antwort nicht.
         </p>
         <p className="gcf-klein">
           {du ? "Bitte gib keine persönlichen Angaben über andere ein." : "Bitte geben Sie keine persönlichen Angaben über andere ein."}
         </p>
-        {mitAuswahl ? (
+        {ohneName ? null : mitAuswahl ? (
           <>
             <label htmlFor="gcf-ki-person" className="gcf-klein" style={{ display: "block", marginTop: 10 }}>
               {du ? "Wer bist du?" : "Wer sind Sie?"} (steht an Anmerkungen und Ideen)
@@ -564,7 +581,7 @@ function Einwilligung({ du, onJa }: { du: boolean; onJa: () => void }) {
           style={{ marginTop: 12 }}
           disabled={!darf}
           onClick={() => {
-            nameMerken(name);
+            if (!ohneName) nameMerken(name);
             onJa();
           }}
         >

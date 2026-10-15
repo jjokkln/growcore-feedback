@@ -246,6 +246,8 @@ Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/s
 
 ## Änderungen
 
+- **v0.16.5** (2026-10-16): `KiHilfe` nimmt `ohneName` (Name kommt aus dem Konto): Die Einwilligung fragt dann nicht nach einem Namen. Mit `datensparsam` nennt sie „die Namen der markierten Bereiche (kein Seitentext)“ statt „die Beschriftungen auf der Seite“. Anlass: Boltwork.
+
 - **v0.16.4** (2026-10-16): **KI-Assistent über den Projektraum bei eigener Sammelstelle:** `assistentUeberProjektraum({ schluessel, url })` (Standard: `GROWCORE_KI_KEY`, `GROWCORE_KI_URL`) liefert die Funktion `assistent` für einen eigenen Speicher. Anmerkungen bleiben z. B. in galdora-network, nur die KI-Fragen gehen mit einem eigenen Projektschlüssel an den Projektraum (Kosten dort beim Projekt). Ohne Schlüssel `undefined`, also kein KI-Knopf. Erster Einsatz: Boltwork.
 
 - **v0.16.3** (2026-10-15): Alle Ebenen des Werkzeugs liegen 1100 höher (Leiste 2147483100 statt 2147482000, Reihenfolge untereinander gleich). Der Barrierefreiheits-Knopf unserer Seiten (`.gc-a11y-trigger`, 2147483000) verdeckte am Handy „Idee“ in der Leiste (gemessen schrooten-web, 390 px).
