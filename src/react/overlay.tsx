@@ -18,6 +18,7 @@ import {
   zuDokumentAnteil,
 } from "../core/anker.ts";
 import { alsMarkdown } from "../core/export.ts";
+import { glaetteZug, type Form } from "../core/form.ts";
 import { ART_LABEL, FARBNAME, FARBWERT, KUNDEN_FARBEN, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
 // Nur Typen: zod bleibt aus dem Browser-Bündel.
 import type { Anmerkung, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
@@ -73,6 +74,14 @@ type Entwurf = {
   anchor_selector: string;
   anchor_label: string;
   zug?: { points: Punkt[]; fallback: Punkt[] };
+  /**
+   * Geglättet (0.13.0): Aus dem Gekritzel wurde eine Ellipse oder ein Rechteck.
+   * `freihand` hält den Zug, wie er gezeichnet wurde — „Freihand zurück“ tauscht.
+   * Beide hängen am selben Anker.
+   */
+  form?: Form;
+  geglaettet?: { points: Punkt[]; fallback: Punkt[] };
+  freihand?: { points: Punkt[]; fallback: Punkt[] };
 };
 
 /** Über allem, aber unterhalb des Maximums — damit ein Dialog notfalls drüber kann. */
@@ -423,6 +432,23 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     return () => window.removeEventListener("keydown", beiTaste);
   }, [entwurf, offen, listeAuf, modus]);
 
+  // ── Klick daneben schließt das Fenster einer Anmerkung (0.13.0) ──────────
+  // Wie jedes kleine Popup: Wer woandershin klickt, will es los sein (Lenny,
+  // 2026-10-15). Ausgenommen sind das Fenster selbst, Marken und Zettel (die
+  // öffnen dann ihre eigene Anmerkung) und die Liste (sie springt zu einer).
+  // `pointerdown` in der Einfangphase: Die Seite darunter bekommt den Klick
+  // trotzdem, nichts wird verschluckt.
+  useEffect(() => {
+    if (!offen) return;
+    const beiDruck = (e: PointerEvent) => {
+      const ziel = e.target instanceof Element ? e.target : null;
+      if (ziel?.closest("[data-anmerkung-fenster],[data-gcf-marke],[data-gcf-liste]")) return;
+      setOffen(null);
+    };
+    document.addEventListener("pointerdown", beiDruck, true);
+    return () => document.removeEventListener("pointerdown", beiDruck, true);
+  }, [offen]);
+
   // ── Sprung auf eine andere Seite ─────────────────────────────────────────
   // Das Overlay hängt im Layout und überlebt den Seitenwechsel. Erst wenn die
   // neue Seite steht, wird geöffnet und hingescrollt — vorher gibt es den
@@ -439,10 +465,13 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
 
   // ── Anlegen ──────────────────────────────────────────────────────────────
 
-  /** Anker und beide Koordinatensätze für einen Zug in Viewport-Punkten. */
-  const verankere = (punkte: Punkt[]) => {
-    const start = punkte[0];
-    const getroffen = elementUnter(start.x, start.y);
+  /**
+   * Anker und beide Koordinatensätze für einen Zug in Viewport-Punkten. `bezug`
+   * bestimmt das Element: sonst der Anfang des Zugs, bei einer geglätteten Form
+   * ihre Mitte — dort liegt, was eingekreist wurde.
+   */
+  const verankere = (punkte: Punkt[], bezug: Punkt = punkte[0]) => {
+    const getroffen = elementUnter(bezug.x, bezug.y);
     const anker = sektionsWurzel(getroffen);
     const box = anker?.getBoundingClientRect() ?? new DOMRect(0, 0, 1, 1);
     return {
@@ -569,6 +598,38 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     liveZugRef.current?.setAttribute("d", "");
     // Ein einzelner Punkt ist ein Klick, kein Strich.
     if (zug.length < 2) return;
+
+    // Geschlossen gezeichnet → ordentliche Form (wie Apple Notizen). Beide
+    // Fassungen am selben Anker, damit „Freihand zurück“ nur die Punkte tauscht.
+    const glatt = glaetteZug(zug);
+    if (glatt) {
+      const mitte = {
+        x: glatt.punkte.reduce((s, p) => s + p.x, 0) / glatt.punkte.length,
+        y: glatt.punkte.reduce((s, p) => s + p.y, 0) / glatt.punkte.length,
+      };
+      const geglaettet = verankere(glatt.punkte, mitte);
+      const roh = verankere(zug, mitte);
+      // Das Feld rechts neben die Form statt mitten hinein: Man soll sehen, was
+      // eingekreist ist, während man schreibt. Ohne Platz rechts rückt es ein.
+      const oben = {
+        x: Math.max(...glatt.punkte.map((p) => p.x)) + 16,
+        y: Math.min(...glatt.punkte.map((p) => p.y)) - 14,
+      };
+      // Dasselbe Objekt in `zug` und `geglaettet`: Der Umschalter erkennt an der
+      // Identität, welche Fassung gerade gilt.
+      const form = { points: geglaettet.points, fallback: geglaettet.fallback };
+      setEntwurf({
+        x: oben.x,
+        y: oben.y,
+        anchor_selector: geglaettet.anchor_selector,
+        anchor_label: geglaettet.anchor_label,
+        zug: form,
+        form: glatt.form,
+        geglaettet: form,
+        freihand: { points: roh.points, fallback: roh.fallback },
+      });
+      return;
+    }
 
     const ende = zug[zug.length - 1];
     const { anchor_selector, anchor_label, points, fallback } = verankere(zug);
@@ -734,6 +795,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
                 if (el) markenRef.current.set(n.id, el);
                 else markenRef.current.delete(n.id);
               }}
+              data-gcf-marke=""
               style={{ pointerEvents: "stroke", cursor: "pointer", opacity: 0 }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -806,6 +868,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
                 geradeGezogenRef.current = bewegt;
               });
             }}
+            data-gcf-marke=""
             onClick={(e) => {
               e.stopPropagation();
               if (geradeGezogenRef.current) {
@@ -866,6 +929,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               if (el) markenRef.current.set(n.id, el);
               else markenRef.current.delete(n.id);
             }}
+            data-gcf-marke=""
             onClick={(e) => {
               e.stopPropagation();
               setOffen(offen === n.id ? null : n.id);
@@ -923,6 +987,15 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
           laeuft={laeuft}
           onAbbruch={() => setEntwurf(null)}
           onSpeichern={entwurfAbschicken}
+          onFormTauschen={
+            entwurf.geglaettet && entwurf.freihand
+              ? () =>
+                  setEntwurf({
+                    ...entwurf,
+                    zug: entwurf.zug === entwurf.geglaettet ? entwurf.freihand : entwurf.geglaettet,
+                  })
+              : undefined
+          }
         />
       )}
 
@@ -1134,6 +1207,26 @@ function Leiste(props: {
         return { left: v.x, top: v.y, bottom: "auto", transform: "none" };
       })()
     : { bottom: 16, left: "50%", transform: "translateX(-50%)" };
+
+  // Der KI-Knopf sitzt auf dem Handy über der Leiste (0.13.0). Deren Höhe
+  // schwankt mit dem Umbruch (mit „Idee“ zwei Zeilen), deshalb gemessen und
+  // als `--gcf-leiste-hoehe` an <html> gemeldet (styles.css).
+  useEffect(() => {
+    const el = leisteRef.current;
+    const html = document.documentElement;
+    if (!el || eingeklappt) {
+      html.style.removeProperty("--gcf-leiste-hoehe");
+      return;
+    }
+    const melden = () => html.style.setProperty("--gcf-leiste-hoehe", `${Math.round(el.getBoundingClientRect().height)}px`);
+    melden();
+    const beobachter = new ResizeObserver(melden);
+    beobachter.observe(el);
+    return () => {
+      beobachter.disconnect();
+      html.style.removeProperty("--gcf-leiste-hoehe");
+    };
+  }, [eingeklappt, knoepfe]);
 
   // Die KI-Hilfe rückt auf dem Handy nach unten, sobald die Leiste nur noch
   // ein Stift ist (styles.css). Ein Attribut statt geteiltem State: Die beiden
@@ -1512,6 +1605,8 @@ function EntwurfsFeld(props: {
   laeuft: boolean;
   onAbbruch: () => void;
   onSpeichern: (text: string, name: string) => void | Promise<void>;
+  /** Nur bei geglätteter Form: zwischen Form und Freihand wechseln (0.13.0). */
+  onFormTauschen?: () => void;
 }) {
   const [text, setText] = useState("");
   const [name, setName] = useState(gespeicherterName);
@@ -1562,6 +1657,22 @@ function EntwurfsFeld(props: {
         {props.entwurf.zug ? "Eingekreist · " : ""}
         {props.entwurf.anchor_label}
       </p>
+      {props.onFormTauschen && (
+        <p style={{ ...kleinStil, marginTop: -2, marginBottom: 6 }}>
+          {props.entwurf.zug === props.entwurf.geglaettet
+            ? props.entwurf.form === "rechteck"
+              ? "Zum Rechteck geglättet · "
+              : "Zum Kreis geglättet · "
+            : "Freihand · "}
+          <button
+            type="button"
+            onClick={props.onFormTauschen}
+            style={{ font: "inherit", color: T.text, background: "none", border: "none", padding: 0, textDecoration: "underline", cursor: "pointer" }}
+          >
+            {props.entwurf.zug === props.entwurf.geglaettet ? "Freihand zurück" : "Wieder glätten"}
+          </button>
+        </p>
+      )}
       <label htmlFor="anmerkung-text" className="gcf-sr">
         Was fällt an dieser Stelle auf?
       </label>
@@ -1955,6 +2066,7 @@ function SeitenListe(props: {
   return (
     <aside
       {...{ [OVERLAY_ATTR]: "" }}
+      data-gcf-liste=""
       aria-label="Liste der Anmerkungen"
       style={{
         // Links: Rechts liegt die KI-Hilfe, beide sollen gleichzeitig offen sein können.

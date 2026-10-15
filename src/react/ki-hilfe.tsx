@@ -123,11 +123,18 @@ type KiHilfeProps = {
   datensparsam?: boolean;
 };
 
+/**
+ * Sichtbar nur mit offener Leiste (0.13.0, Lenny 2026-10-15): Das `?` in der
+ * Navigation holt Leiste UND KI-Knopf, ein zweiter Klick räumt beides weg. Wer
+ * normal arbeitet, sieht nichts vom Werkzeug. Das Gespräch bleibt im
+ * sessionStorage und ist beim nächsten Öffnen wieder da.
+ */
 export function KiHilfe(props: KiHilfeProps) {
   const mounted = useMounted();
   const werkzeugAn = useWerkzeugAn();
   const { assistent } = useFaehigkeiten();
-  if (!mounted || !werkzeugAn || !assistent) return null;
+  const [leisteOffen] = useLeisteOffen();
+  if (!mounted || !werkzeugAn || !assistent || !leisteOffen) return null;
   return createPortal(<KiHilfeInnen {...props} />, document.body);
 }
 

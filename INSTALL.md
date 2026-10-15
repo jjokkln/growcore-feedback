@@ -246,6 +246,8 @@ Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/s
 
 ## Änderungen
 
+- **v0.13.0** (2026-10-15): **KI-Knopf hängt am `?`**: Er erscheint nur bei offener Leiste und verschwindet mit ihr (das Gespräch bleibt im Reiter). **Klick daneben schließt** das Fenster einer Anmerkung, wie bei jedem kleinen Popup; Marken, Zettel und Liste sind ausgenommen. **Einkreisen glättet** wie Apple Notizen: Ein geschlossener Zug wird zur Ellipse oder, eckig gezeichnet, zum Rechteck (gedreht wie gezeichnet, fast waagerecht rastet ein); „Freihand zurück“ im Feld tauscht zurück (`src/core/form.ts`). Am Handy sitzt der KI-Knopf über der Leiste (`--gcf-leiste-hoehe`). Wünsche von Lenny, 2026-10-15.
+
 - **v0.12.0** (2026-10-15): **KI-Assistent statt KI-Hilfe, Knopf „Idee“.** Die KI läuft im Projektraum (Claude Haiku 5.5, `POST /api/feedback/assistent` mit Projektschlüssel), nicht mehr über Vertex; Gemini und `KI_SERVICE_ACCOUNT_KEY` sind raus. Sie kennt den Projektstand (ohne Preise, Angebote, Zahlungen), erklärt die Seite wie bisher und schlägt vor, eine Stelle einzukreisen (wird eine normale Anmerkung) oder eine Idee an Lenny zu schicken (wird ein Vorschlag im Projektraum) — beides erst nach Klick. Vor der ersten Frage „Einverstanden“. `GET /status` meldet zusätzlich `assistent` und `ideen`. Neu im `FeedbackSpeicher`: `assistent`, `idee`. Braucht den Projektraum ab dem 15.10.2026. Entscheidung: growcore-feedback DECISIONS 2026-10-15.
 
 - **v0.11.1** (2026-10-12): Zielmarken ohne `ziel:` (`[nav-team]`) werden erkannt, wenn die Kennung im Katalog steht. Gemini lässt das Präfix manchmal weg; die Marke stand dann roh im Schritt, ohne „Zeigen“.

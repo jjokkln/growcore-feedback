@@ -309,7 +309,8 @@
    nur noch der Stift unten links, ist unten rechts wieder frei. */
 @media (max-width: 767px) {
   .gcf-ki-knopf {
-    bottom: 84px;
+    /* Über der Leiste (16 px Abstand unten + ihre Höhe + 12 px Luft). */
+    bottom: calc(var(--gcf-leiste-hoehe, 56px) + 28px);
     right: 12px;
     padding: 9px 13px;
   }
