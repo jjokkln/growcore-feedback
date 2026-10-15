@@ -35,10 +35,15 @@ export type AssistentAnfrage = {
  */
 export interface FeedbackSpeicher {
   liste(): Promise<Zeile[]>;
-  anlegen(neu: NeueAnmerkung, autor: Autor): Promise<Zeile>;
-  antworten(id: string, body: string, autor: Autor): Promise<void>;
+  /**
+   * `agentur` (0.15.0): Lennys signierter Zugang aus dem Projektraum, unverändert
+   * weitergereicht. Nur die Sammelstelle kann ihn prüfen; ein eigener Speicher
+   * ohne Agentur-Modus ignoriert ihn.
+   */
+  anlegen(neu: NeueAnmerkung, autor: Autor, agentur?: string | null): Promise<Zeile>;
+  antworten(id: string, body: string, autor: Autor, agentur?: string | null): Promise<void>;
   erledigt(id: string, done: boolean, autor: Autor): Promise<void>;
-  loeschen(id: string, autor: Autor): Promise<void>;
+  loeschen(id: string, autor: Autor, agentur?: string | null): Promise<void>;
   /**
    * @deprecated Seit 0.12.0 ungenutzt: Die Sammelstelle hält die Frage selbst fest,
    * wenn sie den Assistenten beantwortet (`assistent`). Bleibt nur, damit eigene
@@ -72,17 +77,24 @@ export interface FeedbackSpeicher {
 /** Der Standard: alles über den Projektschlüssel an den Eingang im Projektraum. */
 export const eingangsSpeicher: FeedbackSpeicher = {
   liste: async () => (await eingang<{ anmerkungen: Zeile[] }>("/anmerkungen", { method: "GET" })).anmerkungen,
-  anlegen: async (neu, autor) =>
-    (await eingang<{ anmerkung: Zeile }>("/anmerkungen", { method: "POST", body: { ...neu, author: autor } }))
-      .anmerkung,
-  antworten: async (id, body, autor) => {
-    await eingang(`/anmerkungen/${id}/antworten`, { method: "POST", body: { body, author: autor } });
+  anlegen: async (neu, autor, agentur) =>
+    (
+      await eingang<{ anmerkung: Zeile }>("/anmerkungen", {
+        method: "POST",
+        body: { ...neu, author: autor, ...(agentur ? { agentur } : {}) },
+      })
+    ).anmerkung,
+  antworten: async (id, body, autor, agentur) => {
+    await eingang(`/anmerkungen/${id}/antworten`, {
+      method: "POST",
+      body: { body, author: autor, ...(agentur ? { agentur } : {}) },
+    });
   },
   erledigt: async (id, done, autor) => {
     await eingang(`/anmerkungen/${id}`, { method: "PATCH", body: { done, author: autor } });
   },
-  loeschen: async (id, autor) => {
-    await eingang(`/anmerkungen/${id}`, { method: "DELETE", body: { author: autor } });
+  loeschen: async (id, autor, agentur) => {
+    await eingang(`/anmerkungen/${id}`, { method: "DELETE", body: { author: autor, ...(agentur ? { agentur } : {}) } });
   },
   assistent: (anfrage, signal) => eingangStrom("/assistent", anfrage, signal),
   idee: async (idee, autor) => {

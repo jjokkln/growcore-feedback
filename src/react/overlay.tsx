@@ -23,6 +23,7 @@ import { glaetteZug, type Form } from "../core/form.ts";
 import { ALLE_SEITEN, ART_LABEL, FARBNAME, FARBWERT, KUNDEN_FARBEN, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
 // Nur Typen: zod bleibt aus dem Browser-Bündel.
 import type { Anmerkung, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
+import { agenturAbmelden, useAgentur, type Agentur } from "./agentur.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
 import { NEU_LADEN, offeneMelden, useEinstieg, useFaehigkeiten, useLeisteOffen, useWerkzeugAn } from "./einstieg.ts";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
@@ -63,6 +64,19 @@ import {
  */
 
 type Modus = "ansehen" | "kommentar" | "zeichnen";
+
+/** Was Lenny auf der Website setzt (0.15.0). Die Farbe ist immer seine. */
+type LennyArt = "question" | "hint" | "changed";
+const LENNY_ARTEN: { wert: LennyArt; label: string; hinweis: string }[] = [
+  { wert: "question", label: "Frage", hinweis: "Der Kunde soll hier etwas beantworten" },
+  { wert: "hint", label: "Hinweis", hinweis: "Zur Info, keine Antwort nötig" },
+  { wert: "changed", label: "Geändert", hinweis: "Geändert, der Kunde soll es prüfen" },
+];
+const LENNY_PLATZHALTER: Record<LennyArt, string> = {
+  question: "Deine Frage an den Kunden …",
+  hint: "Dein Hinweis …",
+  changed: "Was hast du geändert? Der Kunde soll es prüfen …",
+};
 
 /**
  * Was gerade entsteht, aber noch nicht gespeichert ist. `zug` ist gesetzt,
@@ -154,6 +168,13 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
     .map((n) => (n.path === ALLE_SEITEN && n.fallback.length ? { ...n, fallback: [] } : n));
   const [modusRoh, setModus] = useState<Modus>("ansehen");
   const [farbe, setFarbe] = useState<KundenFarbe>("rot");
+  /**
+   * Lenny auf der Website (0.15.0): mit Zugang aus dem Projektraum zeichnet er
+   * in seiner Farbe und wählt die Art statt einer Farbe.
+   */
+  const lenny = useAgentur();
+  const [lennyArt, setLennyArt] = useState<LennyArt>("question");
+  const zeichenFarbe: KundenFarbe | "blau" = lenny ? "blau" : farbe;
   const [zeigeErledigte, setZeigeErledigte] = useState(false);
   const [entwurfRoh, setEntwurf] = useState<Entwurf | null>(null);
   const [offen, setOffen] = useState<string | null>(null);
@@ -229,11 +250,15 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   // Zahl am `?` zählt weiter alle offenen, damit Neues nicht untergeht.
   const sichtbare = leisteOffen ? notizen.filter((n) => zeigeErledigte || !n.done) : [];
   const offeneAnzahl = notizen.filter((n) => !n.done).length;
+  // Fragen von Lenny, auf die noch niemand geantwortet hat: das `?` wird blau (0.15.0).
+  const fragenAnzahl = notizen.filter(
+    (n) => n.from_agency && !n.done && (n.replies.length === 0 || n.replies[n.replies.length - 1].from_agency),
+  ).length;
 
   // Der `?`-Knopf in der Navigation zeigt die Zahl (einstieg.ts).
   useEffect(() => {
-    offeneMelden(offeneAnzahl);
-  }, [offeneAnzahl]);
+    offeneMelden(offeneAnzahl, fragenAnzahl);
+  }, [offeneAnzahl, fragenAnzahl]);
   useEffect(() => () => offeneMelden(0), []);
 
   // Die Personenliste des Projekts (0.9.0), erst wenn jemand die Leiste öffnet: Besucher, die
@@ -595,14 +620,15 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
 
   const entwurfAbschicken = async (text: string, name: string) => {
     if (!entwurf) return;
-    if (!einstellung.ohneName) nameMerken(name);
+    if (!einstellung.ohneName && !lenny) nameMerken(name);
 
     const gemeinsam = {
       path: entwurf.global ? ALLE_SEITEN : pfad,
       anchor_selector: entwurf.anchor_selector,
       anchor_label: entwurf.anchor_label,
-      color: farbe,
+      color: zeichenFarbe,
       viewport_width: window.innerWidth,
+      ...(lenny ? { kind: lennyArt } : {}),
     };
 
     // Gezeichnet: Der Zug IST die Marke, der Text hängt daran und darf fehlen.
@@ -893,7 +919,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
             <path
               ref={entwurfPfadRef}
               fill="none"
-              stroke={FARBWERT[farbe]}
+              stroke={FARBWERT[zeichenFarbe]}
               strokeWidth={3}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -904,7 +930,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
             <path
               ref={liveZugRef}
               fill="none"
-              stroke={FARBWERT[farbe]}
+              stroke={FARBWERT[zeichenFarbe]}
               strokeWidth={3}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -1040,10 +1066,11 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
 
       {entwurf && (
         <EntwurfsFeld
-          einstellung={einstellung}
+          einstellung={lenny ? { ...einstellung, autorName: lenny.name } : einstellung}
           personen={personen ?? []}
           entwurf={entwurf}
-          farbe={farbe}
+          farbe={zeichenFarbe}
+          lennyArt={lenny ? lennyArt : undefined}
           laeuft={laeuft}
           onAbbruch={() => setEntwurf(null)}
           onSpeichern={entwurfAbschicken}
@@ -1064,6 +1091,8 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
           notiz={offeneNotiz}
           nummer={nummerVon(offeneNotiz)}
           laeuft={laeuft}
+          darfLoeschen={offeneNotiz.eigen || Boolean(lenny && offeneNotiz.from_agency)}
+          alsLenny={Boolean(lenny)}
           onSchliessen={() => setOffen(null)}
           onAbhaken={() => void mitMeldung(feedbackApi.erledigt(offeneNotiz.id, !offeneNotiz.done))}
           onLoeschen={async () => {
@@ -1085,6 +1114,9 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
         }}
         farbe={farbe}
         setFarbe={setFarbe}
+        lenny={lenny}
+        lennyArt={lennyArt}
+        setLennyArt={setLennyArt}
         zeigeErledigte={zeigeErledigte}
         setZeigeErledigte={setZeigeErledigte}
         offeneAnzahl={offeneAnzahl}
@@ -1201,6 +1233,9 @@ function Leiste(props: {
   ideen: boolean;
   ideeAuf: boolean;
   setIdeeAuf: (b: boolean) => void;
+  lenny: Agentur | null;
+  lennyArt: LennyArt;
+  setLennyArt: (a: LennyArt) => void;
 }) {
   // Gemerkt, weil die Leiste im Alltag stört und im Termin gebraucht wird —
   // beides soll man einmal einstellen, nicht auf jeder Seite. Standard: zu.
@@ -1404,53 +1439,84 @@ function Leiste(props: {
           ))}
         </div>
 
-        <div
-          role="radiogroup"
-          aria-label="Farbe"
-          style={{ display: "flex", gap: 3, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}
-        >
-          {KUNDEN_FARBEN.map((f) => (
-            <button
-              key={f}
-              type="button"
-              role="radio"
-              aria-checked={props.farbe === f}
-              aria-label={FARBNAME[f]}
-              title={f === "rot" ? "Rot: muss geändert werden" : "Grün: alles andere"}
-              onClick={() => props.setFarbe(f)}
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: "50%",
-                background: FARBWERT[f],
-                border: props.farbe === f ? `3px solid ${T.text}` : `1px solid ${T.kante}`,
-                cursor: "pointer",
-              }}
-            />
-          ))}
-        </div>
+        {/* „Idee“ gehört zu den Werkzeugen, nicht zur Ansicht (Lenny, 2026-10-15). */}
+        {props.ideen && !props.lenny && (
+          <button
+            type="button"
+            style={knopfStil}
+            aria-pressed={props.ideeAuf}
+            title="Eine Idee oder einen Wunsch an Lenny schicken — ohne bestimmte Stelle"
+            onClick={() => props.setIdeeAuf(!props.ideeAuf)}
+          >
+            Idee
+          </button>
+        )}
+
+        {props.lenny ? (
+          // Lenny zeichnet immer in seiner Farbe; er wählt die Art (0.15.0).
+          <div
+            role="radiogroup"
+            aria-label="Art"
+            style={{ display: "flex", gap: 3, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}
+          >
+            {LENNY_ARTEN.map((a) => (
+              <button
+                key={a.wert}
+                type="button"
+                role="radio"
+                aria-checked={props.lennyArt === a.wert}
+                title={a.hinweis}
+                onClick={() => props.setLennyArt(a.wert)}
+                style={{
+                  ...knopfStil,
+                  borderColor: FARBWERT.blau,
+                  background: props.lennyArt === a.wert ? FARBWERT.blau : T.flaeche,
+                  color: props.lennyArt === a.wert ? "#fff" : FARBWERT.blau,
+                  fontWeight: 600,
+                }}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div
+            role="radiogroup"
+            aria-label="Farbe"
+            style={{ display: "flex", gap: 3, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}
+          >
+            {KUNDEN_FARBEN.map((f) => (
+              <button
+                key={f}
+                type="button"
+                role="radio"
+                aria-checked={props.farbe === f}
+                aria-label={FARBNAME[f]}
+                title={f === "rot" ? "Rot: muss geändert werden" : "Grün: alles andere"}
+                onClick={() => props.setFarbe(f)}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  background: FARBWERT[f],
+                  border: props.farbe === f ? `3px solid ${T.text}` : `1px solid ${T.kante}`,
+                  cursor: "pointer",
+                }}
+              />
+            ))}
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 4, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}>
           <button
             type="button"
             style={knopfStil}
             aria-pressed={props.listeAuf}
+            aria-label={`Liste der Anmerkungen, ${props.offeneAnzahl} offen`}
             onClick={() => props.setListeAuf(!props.listeAuf)}
           >
-            Liste · {props.offeneAnzahl} offen
+            {props.offeneAnzahl} offen
           </button>
-
-          {props.ideen && (
-            <button
-              type="button"
-              style={knopfStil}
-              aria-pressed={props.ideeAuf}
-              title="Eine Idee oder einen Wunsch an Lenny schicken — ohne bestimmte Stelle"
-              onClick={() => props.setIdeeAuf(!props.ideeAuf)}
-            >
-              Idee
-            </button>
-          )}
 
           {/* Ein echtes Kästchen, nur neu gezeichnet: Tastatur, Leertaste und
               Screenreader kommen vom Browser (styles.css, `.gcf-haken`). */}
@@ -1466,6 +1532,25 @@ function Leiste(props: {
             Erledigte
           </label>
         </div>
+
+        {props.lenny && (
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm("Als Lenny abmelden? In diesem Browser zeichnest du danach wieder als Besucher.")) agenturAbmelden();
+            }}
+            title={`Angemeldet als ${props.lenny.name} bis ${new Date(props.lenny.bis).toLocaleDateString("de-DE")} · Klicken zum Abmelden`}
+            style={{
+              ...knopfStil,
+              background: FARBWERT.blau,
+              color: "#fff",
+              border: "none",
+              fontWeight: 600,
+            }}
+          >
+            Als Lenny ✕
+          </button>
+        )}
 
         {/* Mit `?` in der Navigation schließt das `?` die Leiste — ein zweiter
             Knopf dafür wäre doppelt. Ohne ihn bleibt „Einklappen" der Weg. */}
@@ -1661,12 +1746,14 @@ function EntwurfsFeld(props: {
   einstellung: OverlayModus;
   personen: string[];
   entwurf: Entwurf;
-  farbe: KundenFarbe;
+  farbe: KundenFarbe | "blau";
   laeuft: boolean;
   onAbbruch: () => void;
   onSpeichern: (text: string, name: string) => void | Promise<void>;
   /** Nur bei geglätteter Form: zwischen Form und Freihand wechseln (0.13.0). */
   onFormTauschen?: () => void;
+  /** Lenny mit Zugang (0.15.0): was er gerade setzt. */
+  lennyArt?: LennyArt;
 }) {
   const [text, setText] = useState("");
   const [name, setName] = useState(gespeicherterName);
@@ -1744,7 +1831,13 @@ function EntwurfsFeld(props: {
         ref={feldRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={props.entwurf.zug ? "Was ist mit diesem Bereich?" : "Was fällt hier auf?"}
+        placeholder={
+          props.lennyArt
+            ? LENNY_PLATZHALTER[props.lennyArt]
+            : props.entwurf.zug
+              ? "Was ist mit diesem Bereich?"
+              : "Was fällt hier auf?"
+        }
         rows={3}
         maxLength={4000}
         onKeyDown={(e) => {
@@ -1869,6 +1962,10 @@ function NotizFenster(props: {
   notiz: Anmerkung;
   nummer: number;
   laeuft: boolean;
+  /** Eigene Anmerkung, oder Lenny mit Zugang bei einer GrowCore-Anmerkung (0.15.0). */
+  darfLoeschen: boolean;
+  /** Lenny schaut zu: Er beantwortet, er wird nicht gefragt. */
+  alsLenny: boolean;
   onSchliessen: () => void;
   onAbhaken: () => void;
   onLoeschen: () => void;
@@ -2007,7 +2104,11 @@ function NotizFenster(props: {
         id={`antwort-${notiz.id}`}
         value={entwurf}
         onChange={(e) => setEntwurf(e.target.value)}
-        placeholder={notiz.kind === "question" ? "Ihre Antwort…" : "Antworten…"}
+        placeholder={
+          props.alsLenny ? "Antworten als Lenny…" : notiz.kind === "question" ? "Ihre Antwort an Lenny…" : "Antworten…"
+        }
+        // Eine offene Frage von Lenny: Wer sie öffnet, soll gleich antworten können.
+        autoFocus={!props.alsLenny && notiz.from_agency && notiz.kind === "question" && !notiz.done}
         rows={2}
         maxLength={4000}
         onKeyDown={(e) => {
@@ -2064,7 +2165,7 @@ function NotizFenster(props: {
           {notiz.done ? "Wieder öffnen" : "Erledigt"}
         </button>
         {/* Löschen nur, was man selbst geschrieben hat — der Eingang prüft es ein zweites Mal. */}
-        {notiz.eigen && (
+        {props.darfLoeschen && (
           <button
             type="button"
             disabled={props.laeuft}

@@ -678,3 +678,8 @@
   pointer-events: none;
   border-radius: 12px;
 }
+
+/* Fragen von Lenny warten auf eine Antwort (0.15.0): Die Zahl am `?` in Lennys Farbe. */
+.gcf-frage-zahl.gcf-frage-lenny {
+  background: #1f5f9e;
+}

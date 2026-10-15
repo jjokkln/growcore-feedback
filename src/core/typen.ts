@@ -81,8 +81,11 @@ export const neueAnmerkungSchema = z
     anchor_label: z.string().trim().min(1).max(120),
     points: z.array(punkt).min(1).max(800),
     fallback: z.array(punkt).min(1).max(800),
-    color: z.enum(KUNDEN_FARBEN),
+    // Blau gehört Lenny: Der Projektraum nimmt es nur mit gültigem Zugang an, sonst wird es Rot.
+    color: z.enum([...KUNDEN_FARBEN, "blau"]),
     viewport_width: z.number().int().min(200).max(8000).nullable(),
+    /** Nur mit Lennys Zugang (0.15.0): Frage, Hinweis oder „Geändert“. */
+    kind: z.enum(["question", "hint", "changed"]).optional(),
   })
   .refine((w) => w.shape !== "pin" || Boolean(w.body), {
     message: "Ein Kommentar ohne Text wäre ein Punkt ohne Aussage.",

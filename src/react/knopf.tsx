@@ -29,14 +29,16 @@ export function AnmerkungsKnopf({ className }: { className?: string }) {
 
 function Knopf({ className }: { className?: string }) {
   const [offen, setOffen] = useLeisteOffen();
-  const { offeneAnzahl } = useEinstieg();
+  const { offeneAnzahl, fragen } = useEinstieg();
 
   useEffect(() => knopfAnmelden(), []);
 
   const zahl = offeneAnzahl > 99 ? "99+" : String(offeneAnzahl);
   const beschriftung = offen
     ? "Anmerkungen schließen"
-    : `Anmerkungen öffnen${offeneAnzahl > 0 ? `, ${offeneAnzahl} offen auf dieser Seite` : ""}`;
+    : `Anmerkungen öffnen${offeneAnzahl > 0 ? `, ${offeneAnzahl} offen auf dieser Seite` : ""}${
+        fragen > 0 ? `, davon ${fragen} ${fragen === 1 ? "Frage" : "Fragen"} von Lenny an Sie` : ""
+      }`;
 
   return (
     <button
@@ -49,7 +51,7 @@ function Knopf({ className }: { className?: string }) {
     >
       <Frage size={16} />
       {offeneAnzahl > 0 && (
-        <span aria-hidden className="gcf-frage-zahl">
+        <span aria-hidden className={`gcf-frage-zahl${fragen > 0 ? " gcf-frage-lenny" : ""}`}>
           {zahl}
         </span>
       )}

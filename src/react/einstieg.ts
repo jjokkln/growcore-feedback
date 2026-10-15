@@ -23,13 +23,19 @@ import { useLocalStorageState } from "./hooks.ts";
 
 const SCHLUESSEL = "gcf-leiste-offen";
 
-type Stand = { knoepfe: number; offeneAnzahl: number };
-let stand: Stand = { knoepfe: 0, offeneAnzahl: 0 };
+/** `fragen` (0.15.0): offene Fragen von Lenny, die auf eine Antwort warten. */
+type Stand = { knoepfe: number; offeneAnzahl: number; fragen: number };
+let stand: Stand = { knoepfe: 0, offeneAnzahl: 0, fragen: 0 };
 const hoerer = new Set<() => void>();
 
 function setzen(neu: Partial<Stand>) {
   const naechster = { ...stand, ...neu };
-  if (naechster.knoepfe === stand.knoepfe && naechster.offeneAnzahl === stand.offeneAnzahl) return;
+  if (
+    naechster.knoepfe === stand.knoepfe &&
+    naechster.offeneAnzahl === stand.offeneAnzahl &&
+    naechster.fragen === stand.fragen
+  )
+    return;
   stand = naechster;
   hoerer.forEach((h) => h());
 }
@@ -41,7 +47,7 @@ function abonnieren(h: () => void) {
   };
 }
 
-const LEER: Stand = { knoepfe: 0, offeneAnzahl: 0 };
+const LEER: Stand = { knoepfe: 0, offeneAnzahl: 0, fragen: 0 };
 
 export function useEinstieg(): Stand {
   return useSyncExternalStore(abonnieren, () => stand, () => LEER);
@@ -52,8 +58,8 @@ export function knopfAnmelden(): () => void {
   return () => setzen({ knoepfe: stand.knoepfe - 1 });
 }
 
-export function offeneMelden(anzahl: number) {
-  setzen({ offeneAnzahl: anzahl });
+export function offeneMelden(anzahl: number, fragen = 0) {
+  setzen({ offeneAnzahl: anzahl, fragen });
 }
 
 /** Ob die Leiste offen ist. Standard: zu — der Einstieg ist der `?`-Knopf. */

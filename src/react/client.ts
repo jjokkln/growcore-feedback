@@ -5,7 +5,8 @@
  * ist der Nachweis „das ist meine Anmerkung" und wird nur an den eigenen
  * Server geschickt, nie an andere Besucher ausgeliefert.
  */
-import type { Anmerkung, KundenFarbe, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
+import type { Anmerkung, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
+import { agenturZugang } from "./agentur.ts";
 
 const BASIS = "/api/feedback";
 const KENNUNG = "gcf-autor";
@@ -49,6 +50,7 @@ export function kopfzeilen(mitJson: boolean): Record<string, string> {
     ...(mitJson ? { "content-type": "application/json" } : {}),
     "x-gcf-autor": kennung(),
     "x-gcf-name": encodeURIComponent(gespeicherterName() || "Gast"),
+    ...(agenturZugang() ? { "x-gcf-agentur": agenturZugang()! } : {}),
   };
 }
 
@@ -69,7 +71,7 @@ async function rufe<T>(pfad: string, init: RequestInit = {}): Promise<Ergebnis<T
 
 export const feedbackApi = {
   laden: () => rufe<{ anmerkungen: Anmerkung[] }>("/anmerkungen"),
-  anlegen: (eingabe: NeueAnmerkung & { color: KundenFarbe }) =>
+  anlegen: (eingabe: NeueAnmerkung) =>
     rufe<{ anmerkung: Anmerkung }>("/anmerkungen", { method: "POST", body: JSON.stringify(eingabe) }),
   antworten: (id: string, body: string) =>
     rufe<{ ok: true }>(`/anmerkungen/${id}/antworten`, { method: "POST", body: JSON.stringify({ body }) }),

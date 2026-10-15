@@ -104,6 +104,15 @@ async function leseJson(request: Request): Promise<unknown> {
   }
 }
 
+/**
+ * Lennys Zugang aus der Kopfzeile `x-gcf-agentur` (0.15.0). Hier nur die Form;
+ * ob er gilt, entscheidet die Sammelstelle.
+ */
+function agenturAus(request: Request): string | null {
+  const wert = request.headers.get("x-gcf-agentur")?.trim();
+  return wert && /^gcl_[A-Za-z0-9_.-]{20,1000}$/.test(wert) ? wert : null;
+}
+
 /** `/api/feedback/anmerkungen/abc` → `["anmerkungen", "abc"]`. */
 function segmente(request: Request): string[] {
   const teile = new URL(request.url).pathname.split("/").filter(Boolean);
@@ -193,7 +202,7 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     if (methode === "POST" && !id) {
       const eingabe = neueAnmerkungSchema.safeParse(await leseJson(request));
       if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Anmerkung.");
-      const anmerkung = await speicher.anlegen(eingabe.data, autor);
+      const anmerkung = await speicher.anlegen(eingabe.data, autor, agenturAus(request));
       return json({ anmerkung: zuBrowser(anmerkung, autor.ref) }, 201);
     }
 
@@ -202,7 +211,7 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     if (methode === "POST" && unter === "antworten") {
       const eingabe = antwortSchema.safeParse(await leseJson(request));
       if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Antwort.");
-      await speicher.antworten(id, eingabe.data.body, autor);
+      await speicher.antworten(id, eingabe.data.body, autor, agenturAus(request));
       return json({ ok: true }, 201);
     }
     if (methode === "PATCH" && !unter) {
@@ -212,7 +221,7 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
       return json({ ok: true });
     }
     if (methode === "DELETE" && !unter) {
-      await speicher.loeschen(id, autor);
+      await speicher.loeschen(id, autor, agenturAus(request));
       return json({ ok: true });
     }
     return fehler(404, "Nicht gefunden.");

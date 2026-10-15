@@ -121,8 +121,37 @@ test("POST gültig: Autor aus den Kopfzeilen, Farbe blau ist nicht wählbar", as
   assert.deepEqual(gesendet.author, { label: "Nadine P.", ref: REF });
   assert.ok(!(await ok.text()).includes(REF));
 
+  // Blau und `kind` gehen durch (0.15.0): Ob sie gelten, entscheidet die Sammelstelle am Zugang.
   const blau = await POST(anfrage("/anmerkungen", { method: "POST", body: JSON.stringify({ ...koerper, color: "blau" }) }));
-  assert.equal(blau.status, 400);
+  assert.equal(blau.status, 201);
+  assert.equal(JSON.parse(String(aufrufe.at(-1)?.init.body)).agentur, undefined);
+  const gelb = await POST(anfrage("/anmerkungen", { method: "POST", body: JSON.stringify({ ...koerper, color: "gold" }) }));
+  assert.equal(gelb.status, 400);
+});
+
+test("Lennys Zugang aus x-gcf-agentur geht an die Sammelstelle, Unförmiges nicht", async () => {
+  const { POST } = feedbackRoute();
+  const koerper = {
+    path: "/",
+    shape: "pin",
+    body: "Welche Telefonnummer soll hier stehen?",
+    anchor_selector: "#kontakt",
+    anchor_label: "Kontakt",
+    points: [{ x: 0.5, y: 0.5 }],
+    fallback: [{ x: 0.1, y: 0.2 }],
+    color: "blau",
+    viewport_width: 1280,
+    kind: "question",
+  };
+  const zugang = "gcl_eyJwIjoiMSJ9.abcdefghijklmnopqrstuvwxyz";
+  await POST(anfrage("/anmerkungen", { method: "POST", body: JSON.stringify(koerper), headers: { "x-gcf-agentur": zugang } }));
+  const gesendet = JSON.parse(String(aufrufe.at(-1)?.init.body));
+  assert.equal(gesendet.agentur, zugang);
+  assert.equal(gesendet.kind, "question");
+  await POST(anfrage("/anmerkungen", { method: "POST", body: JSON.stringify(koerper), headers: { "x-gcf-agentur": "<script>" } }));
+  assert.equal(JSON.parse(String(aufrufe.at(-1)?.init.body)).agentur, undefined);
+  await POST(anfrage(`/anmerkungen/${ID}/antworten`, { method: "POST", body: '{"body":"Ja"}', headers: { "x-gcf-agentur": zugang } }));
+  assert.equal(JSON.parse(String(aufrufe.at(-1)?.init.body)).agentur, zugang);
 });
 
 test("DELETE und PATCH nur mit gültiger Id", async () => {
