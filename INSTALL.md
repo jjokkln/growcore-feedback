@@ -246,6 +246,8 @@ Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/s
 
 ## Änderungen
 
+- **v0.16.3** (2026-10-15): Alle Ebenen des Werkzeugs liegen 1100 höher (Leiste 2147483100 statt 2147482000, Reihenfolge untereinander gleich). Der Barrierefreiheits-Knopf unserer Seiten (`.gc-a11y-trigger`, 2147483000) verdeckte am Handy „Idee“ in der Leiste (gemessen schrooten-web, 390 px).
+
 - **v0.16.2** (2026-10-15): **Assistent und „Idee“ nur, wenn die Sammelstelle sie kann.** `speicher.status()` darf `{ an, assistent?, ideen? }` liefern (`SammelstellenStatus`); der Standard-Speicher übernimmt nur, was die Sammelstelle ausdrücklich mit `true` meldet. Der Projektraum meldet beides (ab 15.10.2026 spät), galdora-network nicht: Dort erscheint „Idee“ nicht mehr, statt beim Klick mit 404 zu scheitern. Ein eigener Speicher, der nur `true`/`false` liefert, verhält sich wie bisher.
 
 - **v0.16.1** (2026-10-15): Zettel an Kreisen begrenzen den Text innen auf drei Zeilen; vorher schaute die vierte Zeile durch den Innenabstand heraus.

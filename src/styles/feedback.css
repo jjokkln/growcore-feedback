@@ -58,7 +58,7 @@
   position: fixed;
   left: 16px;
   bottom: 16px;
-  z-index: 2147482002;
+  z-index: 2147483102;
 }
 .gcf-stift {
   position: relative;
@@ -288,7 +288,7 @@
   position: fixed;
   right: 16px;
   bottom: 16px;
-  z-index: 2147481500;
+  z-index: 2147482600;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -336,7 +336,7 @@
   left: 8px;
   right: 8px;
   bottom: 8px;
-  z-index: 2147482500;
+  z-index: 2147483600;
   display: flex;
   flex-direction: column;
   height: min(78dvh, 640px);
@@ -674,7 +674,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 2147482100;
+  z-index: 2147483200;
   pointer-events: none;
   border-radius: 12px;
 }

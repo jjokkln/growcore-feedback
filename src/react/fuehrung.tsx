@@ -32,7 +32,7 @@ import { findeZiel, KI_UI_ATTR } from "./ziel-finden.ts";
  * Seite wechselt, ginge mit einem `useState` verloren.
  */
 
-const EBENE = 2147482200;
+const EBENE = 2147483300;
 const STAND = "gcf-ki-fuehrung";
 export const FUEHRUNG_EREIGNIS = "gcf:ki-fuehrung";
 
@@ -213,7 +213,7 @@ export function Fuehrung({
         role="status"
         aria-live="polite"
         className="gcf-karte"
-        // Über dem KI-Fenster (2147482500), das jetzt offen bleibt.
+        // Über dem KI-Fenster (2147483600), das jetzt offen bleibt.
         style={{ zIndex: EBENE + 400 }}
       >
         <p className="gcf-eyebrow">

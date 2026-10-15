@@ -103,8 +103,12 @@ type Entwurf = {
   freihand?: { points: Punkt[]; fallback: Punkt[] };
 };
 
-/** Über allem, aber unterhalb des Maximums — damit ein Dialog notfalls drüber kann. */
-const EBENE = 2147482000;
+/**
+ * Über allem, aber unterhalb des Maximums — damit ein Dialog notfalls drüber kann.
+ * Seit 0.16.3 auch über dem Barrierefreiheits-Knopf unserer Seiten
+ * (`.gc-a11y-trigger`, 2147483000): Am Handy lag er unten links über „Idee“.
+ */
+const EBENE = 2147483100;
 
 const T = {
   flaeche: "var(--gcf-flaeche)",
