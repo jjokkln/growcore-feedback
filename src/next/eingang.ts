@@ -105,26 +105,31 @@ export async function eingangStrom(
  *   nachgezogen ist.
  * - Alles andere (kein Schlüssel, abgewiesen, nicht erreichbar) → „aus".
  *   Lieber kein Werkzeug als eines, das bei jedem Klick einen Fehler zeigt.
+ *
+ * Assistent und „Idee“ (0.16.2) nur, wenn die Sammelstelle sie ausdrücklich
+ * meldet: Der Projektraum sagt `assistent: true, ideen: true`, galdora-network
+ * (eigener Eingang ohne diese Pfade) sagt nichts davon.
  */
-export async function eingangStatus(): Promise<boolean> {
+export async function eingangStatus(): Promise<{ an: boolean; assistent: boolean; ideen: boolean }> {
+  const aus = { an: false, assistent: false, ideen: false };
   const schluessel = process.env.GROWCORE_FEEDBACK_KEY?.trim();
-  if (!schluessel) return false;
+  if (!schluessel) return aus;
   const basis = (process.env.GROWCORE_FEEDBACK_URL?.trim() || STANDARD_URL).replace(/\/$/, "");
   try {
     const antwort = await fetch(`${basis}/api/feedback/status`, {
       headers: { authorization: `Bearer ${schluessel}` },
       cache: "no-store",
     });
-    if (antwort.status === 404) return true;
+    if (antwort.status === 404) return { an: true, assistent: false, ideen: false };
     if (!antwort.ok) {
       if (antwort.status === 401) console.error("[feedback] Schlüssel abgewiesen — GROWCORE_FEEDBACK_KEY prüfen.");
-      return false;
+      return aus;
     }
-    const daten = (await antwort.json().catch(() => ({}))) as { an?: unknown };
-    return daten.an === true;
+    const daten = (await antwort.json().catch(() => ({}))) as { an?: unknown; assistent?: unknown; ideen?: unknown };
+    return { an: daten.an === true, assistent: daten.assistent === true, ideen: daten.ideen === true };
   } catch (e) {
     console.error("[feedback] Eingang nicht erreichbar:", e instanceof Error ? e.message : e);
-    return false;
+    return aus;
   }
 }
 

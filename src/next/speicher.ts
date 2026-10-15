@@ -65,14 +65,22 @@ export interface FeedbackSpeicher {
    * Optional (0.7.0): Ist das Werkzeug für dieses Projekt eingeschaltet? Der
    * Schalter liegt bei der Sammelstelle, nicht in der App. Ohne diese
    * Funktion gilt „an" — dann entscheidet allein `FEEDBACK=1`.
+   *
+   * Seit 0.16.2 darf die Antwort auch sagen, was die Sammelstelle kann
+   * (`SammelstellenStatus`): Fehlt dort `assistent` oder `ideen`, zeigt das
+   * Overlay den Teil nicht, auch wenn der Speicher die Funktion hat. Sonst
+   * stünde „Idee“ in einer App, deren Sammelstelle den Pfad nicht kennt.
    */
-  status?(): Promise<boolean>;
+  status?(): Promise<boolean | SammelstellenStatus>;
   /**
    * Optional (0.9.0): Wer darf sich als Autor auswählen? Anzeigenamen, gepflegt bei der
    * Sammelstelle. Leer oder ohne diese Funktion bleibt es beim freien Namensfeld.
    */
   personen?(): Promise<string[]>;
 }
+
+/** Was die Sammelstelle meldet (0.16.2). Fehlt ein Feld, gilt „kann es“. */
+export type SammelstellenStatus = { an: boolean; assistent?: boolean; ideen?: boolean };
 
 /** Der Standard: alles über den Projektschlüssel an den Eingang im Projektraum. */
 export const eingangsSpeicher: FeedbackSpeicher = {

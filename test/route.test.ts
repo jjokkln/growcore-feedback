@@ -41,7 +41,7 @@ beforeEach(() => {
   aufrufe = [];
   statusAufrufe = 0;
   antwortVomEingang = () => Response.json({ anmerkungen: [zeile(REF), zeile(FREMD), zeile(null, true)] });
-  statusVomEingang = () => Response.json({ an: true });
+  statusVomEingang = () => Response.json({ an: true, assistent: true, ideen: true });
   globalThis.fetch = (async (url: string, init: RequestInit) => {
     if (String(url).endsWith("/api/feedback/status")) {
       statusAufrufe++;
@@ -238,6 +238,21 @@ test("Antwortparser: unbekannte Ziele fallen weg, halbe Marken blitzen nicht auf
   assert.equal(a.schritte[2]?.text, "Halb");
 });
 
+test("Sammelstelle ohne Assistent und Ideen (galdora-network): weder Knopf noch Pfad (0.16.2)", async () => {
+  process.env.KI_HILFE = "1";
+  statusVomEingang = () => Response.json({ an: true });
+  const ki = { produkt: "Testseite", wissen: "Nichts.", ziele: {} };
+  const route = feedbackRoute({ ki });
+  assert.deepEqual(await (await route.GET(anfrage("/status", { ref: null }))).json(), { an: true, assistent: false, ideen: false });
+  assert.equal((await route.POST(anfrage("/ideen", { method: "POST", body: JSON.stringify({ titel: "X", seite: "/" }) }))).status, 404);
+  assert.equal((await route.POST(anfrage("/assistent", { method: "POST", body: "{}" }))).status, 503);
+  assert.equal(aufrufe.length, 0);
+  // Eigener Speicher, der nur `true` meldet: wie bisher, der Speicher entscheidet.
+  const eigen = { liste: async () => [], anlegen: async () => { throw new Error(); }, antworten: async () => {}, erledigt: async () => {}, loeschen: async () => {}, idee: async () => {}, status: async () => true };
+  assert.deepEqual(await (await feedbackRoute({ speicher: eigen }).GET(anfrage("/status", { ref: null }))).json(), { an: true, assistent: false, ideen: true });
+  process.env.KI_HILFE = "";
+});
+
 // ─── Fernschalter (0.7.0) ───────────────────────────────────────────────────
 
 test("Schalter an: /status sagt an, der Rest läuft wie bisher", async () => {
@@ -262,7 +277,7 @@ test("Schalter aus: /status sagt aus, alle anderen Pfade 404, kein Datenaufruf",
 
 test("Sammelstelle ohne Schalter (404) gilt als an, nicht erreichbar oder abgewiesen als aus", async () => {
   statusVomEingang = () => Response.json({ fehler: "Nicht gefunden." }, { status: 404 });
-  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: true, assistent: false, ideen: true });
+  assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: true, assistent: false, ideen: false });
 
   statusVomEingang = () => Response.json({ fehler: "Schlüssel ungültig." }, { status: 401 });
   assert.deepEqual(await (await feedbackRoute().GET(anfrage("/status", { ref: null }))).json(), { an: false });

@@ -11,7 +11,7 @@ import {
 import { wissenFuerSammelstelle, type KiWissen } from "./anweisungen.ts";
 import { besucherKennung, bremse } from "./bremse.ts";
 import { EingangFehler } from "./eingang.ts";
-import { eingangsSpeicher, type FeedbackSpeicher, type Zeile } from "./speicher.ts";
+import { eingangsSpeicher, type FeedbackSpeicher, type SammelstellenStatus, type Zeile } from "./speicher.ts";
 
 /**
  * Der Server-Teil in der Kunden-App: eine Catch-all-Route, die das Overlay
@@ -125,7 +125,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
   const an = () => process.env.FEEDBACK === "1";
   const speicher = optionen.speicher ?? eingangsSpeicher;
-  const assistentAn = () => Boolean(optionen.ki && speicher.assistent && process.env.KI_HILFE === "1");
   /** Mit Konto zählt das Konto, sonst die Kennung des Browsers. */
   const wer = async (request: Request): Promise<Autor | null> =>
     optionen.identitaet ? optionen.identitaet(request) : autorAus(request);
@@ -135,14 +134,22 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
   // Der Schalter bei der Sammelstelle, je Server-Instanz 30 s gemerkt: Das
   // Overlay fragt bei jedem Laden, und nicht jeder Aufruf soll die
   // Sammelstelle zweimal treffen. Ausschalten wirkt also nach spätestens 30 s.
-  let schalter: { an: boolean; bis: number } | null = null;
-  const zentralAn = async (): Promise<boolean> => {
-    if (!speicher.status) return true;
-    if (schalter && schalter.bis > Date.now()) return schalter.an;
-    const jetzt = await speicher.status().catch(() => false);
-    schalter = { an: jetzt, bis: Date.now() + 30_000 };
+  let schalter: (SammelstellenStatus & { bis: number }) | null = null;
+  const sammelstelle = async (): Promise<SammelstellenStatus> => {
+    if (!speicher.status) return { an: true };
+    if (schalter && schalter.bis > Date.now()) return schalter;
+    const roh = await speicher.status().catch(() => false);
+    const jetzt = typeof roh === "boolean" ? { an: roh } : roh;
+    schalter = { ...jetzt, bis: Date.now() + 30_000 };
     return jetzt;
   };
+  const zentralAn = async () => (await sammelstelle()).an;
+  // Assistent und „Idee“ (0.16.2): der Speicher muss sie haben UND die
+  // Sammelstelle darf sie nicht abstreiten (siehe `SammelstellenStatus`).
+  const assistentAn = async () =>
+    Boolean(optionen.ki && speicher.assistent && process.env.KI_HILFE === "1") &&
+    (await sammelstelle()).assistent !== false;
+  const ideenAn = async () => Boolean(speicher.idee) && (await sammelstelle()).ideen !== false;
 
   // Die Personenliste, ebenso 30 s gemerkt: Das Overlay fragt sie bei jedem Öffnen.
   let personen: { liste: string[]; bis: number } | null = null;
@@ -162,7 +169,7 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
       // Ohne Anmeldung beantwortbar: Es verrät nur, ob das `?` erscheinen soll,
       // und welche Teile (0.12.0) — Assistent und „Idee“ hängen am Speicher.
       if (!(await zentralAn())) return json({ an: false });
-      return json({ an: true, assistent: assistentAn(), ideen: Boolean(speicher.idee) });
+      return json({ an: true, assistent: await assistentAn(), ideen: await ideenAn() });
     }
     if (!(await zentralAn())) return fehler(404, "Das Feedback-Werkzeug ist ausgeschaltet.");
 
@@ -229,7 +236,7 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
 
   async function assistent(request: Request, autor: Autor | null): Promise<Response> {
     const ki = optionen.ki;
-    if (!ki || !speicher.assistent || process.env.KI_HILFE !== "1") {
+    if (!ki || !speicher.assistent || !(await assistentAn())) {
       return fehler(503, "Der KI-Assistent ist nicht eingeschaltet.");
     }
     if (!bremse(`ki:${schluessel(request, autor)}`, 30, 3_600_000)) {
@@ -258,7 +265,7 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
   }
 
   async function idee(request: Request, autor: Autor | null): Promise<Response> {
-    if (!speicher.idee) return fehler(404, "Nicht gefunden.");
+    if (!speicher.idee || !(await ideenAn())) return fehler(404, "Nicht gefunden.");
     if (!autor) return fehler(400, "Ohne Kennung lässt sich nichts speichern. Bitte die Seite neu laden.");
     if (!bremse(`schreiben:${schluessel(request, autor)}`, 40, 3_600_000)) {
       return fehler(429, "Das waren viele Einträge in kurzer Zeit. Bitte etwas später weitermachen.");
