@@ -84,8 +84,8 @@ export function useLeisteOffen(): [boolean, (offen: boolean) => void] {
  */
 let an: boolean | null = null;
 /** Welche Teile die Route anbietet (0.12.0). Ältere Routen melden nichts → beides aus. */
-export type Faehigkeiten = { assistent: boolean; ideen: boolean };
-const KEINE: Faehigkeiten = { assistent: false, ideen: false };
+export type Faehigkeiten = { assistent: boolean; ideen: boolean; bild: boolean; nachfrage: boolean };
+const KEINE: Faehigkeiten = { assistent: false, ideen: false, bild: false, nachfrage: false };
 let faehigkeiten: Faehigkeiten = KEINE;
 let laeuft = false;
 let zuletzt = 0;
@@ -100,15 +100,32 @@ async function anFragen(): Promise<void> {
   try {
     const antwort = await fetch("/api/feedback/status", { cache: "no-store" });
     const daten = antwort.ok
-      ? ((await antwort.json().catch(() => ({}))) as { an?: unknown; assistent?: unknown; ideen?: unknown })
+      ? ((await antwort.json().catch(() => ({}))) as {
+          an?: unknown;
+          assistent?: unknown;
+          ideen?: unknown;
+          bild?: unknown;
+          nachfrage?: unknown;
+        })
       : {};
     neu = daten.an === true;
-    teile = neu ? { assistent: daten.assistent === true, ideen: daten.ideen === true } : KEINE;
+    teile = neu
+      ? {
+          assistent: daten.assistent === true,
+          ideen: daten.ideen === true,
+          bild: daten.bild === true,
+          nachfrage: daten.nachfrage === true,
+        }
+      : KEINE;
   } catch {
     neu = false;
   }
   laeuft = false;
-  const teileNeu = teile.assistent !== faehigkeiten.assistent || teile.ideen !== faehigkeiten.ideen;
+  const teileNeu =
+    teile.assistent !== faehigkeiten.assistent ||
+    teile.ideen !== faehigkeiten.ideen ||
+    teile.bild !== faehigkeiten.bild ||
+    teile.nachfrage !== faehigkeiten.nachfrage;
   if (teileNeu) faehigkeiten = teile;
   if (neu !== an || teileNeu) {
     an = neu;
@@ -135,7 +152,7 @@ export function useWerkzeugAn(): boolean {
   return useSyncExternalStore(anAbonnieren, () => an === true, () => false);
 }
 
-/** Was die Route außer Anmerkungen anbietet: KI-Assistent und Knopf „Idee“ (0.12.0). */
+/** Was die Route außer Anmerkungen anbietet: KI-Assistent, Knopf „Idee“ (0.12.0), Bild und Nachfrage (0.17.0). */
 export function useFaehigkeiten(): Faehigkeiten {
   return useSyncExternalStore(anAbonnieren, () => faehigkeiten, () => KEINE);
 }

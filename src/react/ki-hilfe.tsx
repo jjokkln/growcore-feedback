@@ -10,10 +10,13 @@ import { ALLE_SEITEN } from "../core/konstanten.ts";
 import type { KiNachricht } from "../core/typen.ts";
 import type { ZielKatalog } from "../core/ziele.ts";
 import { feedbackApi, gespeicherterName, kopfzeilen, nameMerken } from "./client.ts";
+import { EINWILLIGUNG, EINWILLIGUNG_STAND } from "./einwilligung.ts";
 import { anmerkungenGeaendert, useFaehigkeiten, useLeisteOffen, useWerkzeugAn } from "./einstieg.ts";
 import { Fuehrung, starteFuehrung } from "./fuehrung.tsx";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
 import { Fadenkreuz, Funken, Haken, Hoch, Info, Pfeil, Runter, Start } from "./icons.tsx";
+import { Daumen } from "./icons.tsx";
+import { ermittleUmgebung } from "./umgebung.ts";
 import { markierungFuer, sammleStellen } from "./stellen.ts";
 import { KI_UI_ATTR } from "./ziel-finden.ts";
 
@@ -37,13 +40,12 @@ import { KI_UI_ATTR } from "./ziel-finden.ts";
  * ─── Was gespeichert wird ───────────────────────────────────────────────────
  *
  * Der Verlauf liegt im `sessionStorage` dieses Reiters. Der Projektraum hält
- * nur die FRAGE fest (30 Tage), keine Antwort. Eine Anmerkung oder Idee
+ * seit 0.17.0 Frage UND Antwort fest (90 Tage, vorher nur die Frage), dazu den
+ * Daumen, wenn die Person ihn setzt. Eine Anmerkung oder Idee
  * entsteht erst, wenn die Person auf den Knopf unter dem Vorschlag klickt.
  */
 
 const VERLAUF = "gcf-ki-verlauf-2";
-const EINWILLIGUNG = "gcf-ki-einwilligung";
-const EINWILLIGUNG_STAND = "anthropic-2026-10";
 
 type Vorschlag =
   | { werkzeug: "stelle_markieren"; eingabe: MarkierenEingabe }
@@ -59,6 +61,10 @@ type Eintrag =
       /** Wo der Assistent nachgesehen hat (Beschriftungen), nur zur Anzeige. */
       quellen?: string[];
       vorschlag?: Vorschlag & { stand: VorschlagStand; meldung?: string };
+      /** 0.17.0: Kennung der gespeicherten Frage; ohne sie (ältere Sammelstelle) gibt es keinen Daumen. */
+      frageId?: string;
+      /** 0.17.0: 1 hilfreich, -1 nicht hilfreich. */
+      bewertung?: 1 | -1;
     };
 
 function leseVerlauf(): Eintrag[] {
@@ -266,6 +272,9 @@ function KiHilfeInnen({
             aendereLetzte((e) => ({ ...e, vorschlag: { ...vorschlag, stand: "offen" } }));
           } else if (ereignis.typ === "fehler") {
             setFehler(ereignis.text);
+          } else if (ereignis.typ === "ende" && ereignis.frage_id) {
+            const frageId = ereignis.frage_id;
+            aendereLetzte((e) => ({ ...e, frageId }));
           }
         }
       }
@@ -281,6 +290,15 @@ function KiHilfeInnen({
       setStatus(null);
       abbruchRef.current = null;
     }
+  };
+
+  /** Daumen unter einer Antwort (0.17.0). Optimistisch gesetzt; scheitert es, bleibt er trotzdem stehen — ein Zusatz, keine Fehlermeldung wert. */
+  const bewerte = (index: number, wert: 1 | -1) => {
+    const eintrag = verlauf[index];
+    if (!eintrag || eintrag.rolle !== "ki" || !eintrag.frageId) return;
+    const frageId = eintrag.frageId;
+    setVerlauf((alt) => alt.map((e, i) => (i === index && e.rolle === "ki" ? { ...e, bewertung: wert } : e)));
+    void feedbackApi.bewerten({ frage_id: frageId, wert });
   };
 
   const entscheide = async (index: number, ja: boolean) => {
@@ -311,6 +329,7 @@ function KiHilfeInnen({
         shape: "stroke",
         body: v.eingabe.notiz,
         color: v.eingabe.farbe,
+        umgebung: ermittleUmgebung(),
       });
       if (!antwort.ok) {
         setze("fehler", antwort.fehler);
@@ -420,6 +439,9 @@ function KiHilfeInnen({
                     onFuehren={fuehren}
                     vorschlag={n.rolle === "ki" ? n.vorschlag : undefined}
                     onEntscheiden={(ja) => void entscheide(i, ja)}
+                    bewertbar={n.rolle === "ki" && Boolean(n.frageId)}
+                    bewertung={n.rolle === "ki" ? n.bewertung : undefined}
+                    onBewerten={(w) => bewerte(i, w)}
                   />
                 ))}
                 {verlauf.length === 0 && vorschlaege.length > 0 && (
@@ -535,7 +557,7 @@ function Einwilligung({
           {du ? "Bevor du fragst: " : "Bevor Sie fragen: "}
           Der KI-Assistent ist eine künstliche Intelligenz (Claude von Anthropic). {du ? "Deine" : "Ihre"} Nachrichten, die aktuelle Seite und die
           {datensparsam ? " Namen der markierten Bereiche (kein Seitentext)" : " Beschriftungen auf der Seite"} gehen dafür an den Projektraum
-          von Lenny Helps und von dort an Anthropic in den USA. Die Frage wird 30 Tage aufbewahrt, die Antwort nicht.
+          von Lenny Helps und von dort an Anthropic in den USA. Frage und Antwort werden 90 Tage aufbewahrt, damit Lenny die Hilfe verbessern kann.
         </p>
         <p className="gcf-klein">
           {du ? "Bitte gib keine persönlichen Angaben über andere ein." : "Bitte geben Sie keine persönlichen Angaben über andere ein."}
@@ -698,6 +720,9 @@ function Blase({
   onFuehren,
   vorschlag,
   onEntscheiden,
+  bewertbar,
+  bewertung,
+  onBewerten,
 }: {
   rolle: KiNachricht["rolle"];
   anrede: "du" | "Sie";
@@ -709,6 +734,9 @@ function Blase({
   onFuehren?: (schritte: Schritt[], ab: number) => void;
   vorschlag?: Vorschlag & { stand: VorschlagStand; meldung?: string };
   onEntscheiden?: (ja: boolean) => void;
+  bewertbar?: boolean;
+  bewertung?: 1 | -1;
+  onBewerten?: (wert: 1 | -1) => void;
 }) {
   if (rolle === "nutzer") {
     return (
@@ -783,6 +811,35 @@ function Blase({
 
         {quellen && quellen.length > 0 && fertig && (
           <p className="gcf-quellen">Nachgesehen im Projektraum: {quellen.join(", ")}</p>
+        )}
+
+        {bewertbar && fertig && onBewerten && (
+          <div className="gcf-daumen" role="group" aria-label="War die Antwort hilfreich?">
+            <span className="gcf-daumen-frage">Hilfreich?</span>
+            <button
+              type="button"
+              className="gcf-daumen-knopf"
+              aria-pressed={bewertung === 1}
+              aria-label="Antwort war hilfreich"
+              title="Hilfreich"
+              onClick={() => onBewerten(1)}
+            >
+              <Daumen size={14} />
+            </button>
+            <button
+              type="button"
+              className="gcf-daumen-knopf"
+              aria-pressed={bewertung === -1}
+              aria-label="Antwort war nicht hilfreich"
+              title="Nicht hilfreich"
+              onClick={() => onBewerten(-1)}
+            >
+              <Daumen size={14} runter />
+            </button>
+            <span role="status" className="gcf-daumen-danke">
+              {bewertung ? "Danke!" : ""}
+            </span>
+          </div>
         )}
       </div>
     </div>

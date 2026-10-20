@@ -63,3 +63,29 @@ export function agenturArt(kind: Art, autor: string | null | undefined): string 
  * soll die Anmerkung dort auch überall stehen (Lenny, 2026-10-15).
  */
 export const ALLE_SEITEN = "/*";
+
+
+/**
+ * Wo und womit eine Anmerkung gesetzt wurde (0.17.0). Der Browser sammelt es
+ * bei jeder neuen Anmerkung; es erspart die Rückfrage „am Handy oder am
+ * Rechner?“ und sagt, ob die Stelle auf dem Entwurf, in der Vorschau oder live
+ * liegt. Keine Kennung, keine Adresse des Besuchers — nur das Gerät.
+ */
+export type Umgebung = {
+  /** `location.host`, z. B. „boston-club.vercel.app“ oder „localhost:3000“. */
+  host: string;
+  geraet: "desktop" | "tablet" | "handy";
+  browser: string;
+  os: string;
+  viewport_width: number;
+  viewport_height: number;
+  pixel_ratio: number;
+  farbmodus?: "hell" | "dunkel";
+};
+
+/**
+ * Obergrenze des Bildes der Stelle (0.17.0) als Länge der Data-URL: 600 KB
+ * dekodiert sind rund 800.000 Zeichen Base64. Hier und nicht in `typen.ts`,
+ * weil der Browser sie braucht und zod nicht laden soll.
+ */
+export const BILD_MAX_ZEICHEN = 820_000;

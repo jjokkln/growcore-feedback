@@ -1,11 +1,15 @@
 import type { ZielKatalog } from "../core/ziele.ts";
-import { GrowcoreFeedback } from "../react/feedback.tsx";
+import { FeedbackLader, KnopfLader } from "../react/lader.tsx";
 import type { OverlayModus } from "../react/overlay.tsx";
-import { AnmerkungsKnopf } from "../react/knopf.tsx";
 
 /**
  * Server-Komponente fürs Layout. Liest die Schalter zur Laufzeit des
  * Servers — ohne `FEEDBACK=1` wird kein Client-Code des Werkzeugs geladen.
+ *
+ * Seit 0.17.0 wirklich: Der Client-Code kommt als eigener Chunk (`FeedbackLader`)
+ * und steht nur im HTML, wenn `FEEDBACK=1`. Vorher hing er an jeder Seite des
+ * Projekts, auch bei `FEEDBACK` aus (gemessen an bejob-landing: rund 24 KB gz).
+ * Warum ein Lader im Browser und kein `import()` hier: siehe `react/lader.tsx`.
  *
  *   <FeedbackWerkzeug projekt="Straffälligenhilfe Krefeld" ziele={ZIELE} />
  */
@@ -22,7 +26,7 @@ export function FeedbackWerkzeug(props: {
   if (process.env.FEEDBACK !== "1") return null;
   const ki = process.env.KI_HILFE === "1" && Boolean(props.ziele);
   return (
-    <GrowcoreFeedback
+    <FeedbackLader
       projekt={props.projekt}
       kiHilfe={ki}
       ziele={props.ziele ?? {}}
@@ -40,5 +44,5 @@ export function FeedbackWerkzeug(props: {
  */
 export function FeedbackKnopf(props: { className?: string }) {
   if (process.env.FEEDBACK !== "1") return null;
-  return <AnmerkungsKnopf className={props.className} />;
+  return <KnopfLader className={props.className} />;
 }

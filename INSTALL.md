@@ -54,7 +54,8 @@ nirgends sonst hin.
 | --- | --- | --- |
 | `FEEDBACK` | `1` | Werkzeug an. Ohne: keine Route, kein Client-Code |
 | `GROWCORE_FEEDBACK_KEY` | `gcf_…` | Schlüssel aus Schritt 2, **nur Server** |
-| `KI_HILFE` | `1` | KI-Assistent an (optional, braucht Schritt 5) |
+| `KI_HILFE` | `1` | KI-Assistent an (optional, braucht Schritt 5). Seit v0.17.0 auch die Rückfragen zu knappen Anmerkungen |
+| `FEEDBACK_BILD` | `0` | Optional, nur zum Abstellen: kein Bild der Stelle in dieser App, egal was der Projektraum sagt (v0.17.0) |
 
 Kein KI-Schlüssel in der App: Der Assistent läuft im Projektraum, die App reicht
 die Frage mit ihrem Projektschlüssel weiter. Die alten Variablen
@@ -160,11 +161,26 @@ Anmerkungen daran hängen und in der Liste lesbar heißen.
 - **Einstufung:** KI-Assistent = Chatbot, begrenztes Risiko; GrowCore ist
   Anbieter. Steht in growcore-feedback DECISIONS 2026-10-15, nicht je Projekt neu.
 - **Einwilligung:** Vor der ersten Frage klickt die Person „Einverstanden“
-  (Übermittlung an Anthropic, USA); gemerkt im Browser.
+  (Übermittlung an Anthropic, USA); gemerkt im Browser. Der Text nennt seit
+  v0.17.0, dass Frage **und Antwort 90 Tage** aufbewahrt werden; wer vorher
+  zugestimmt hat, wird einmal neu gefragt (`anthropic-2026-10b`). Dieselbe
+  Einwilligung gilt für die Rückfragen zu knappen Anmerkungen.
+- **Kennung:** Die Zufallskennung `gcf-autor` im Browser entsteht seit v0.17.0
+  erst, wenn jemand etwas schreibt (Anmerkung, Antwort, Frage an die KI), nicht
+  schon beim Ansehen.
+- **Umgebung und Bild:** Jede neue Anmerkung trägt Gerät, Browser, System,
+  Fenstergröße und Host der Seite (keine Kennung, keine IP). Ein Bild der
+  Stelle kommt nur mit, wenn der Projektraum es für das Projekt eingeschaltet
+  hat (`bild` im Status), die App nicht `datensparsam` ist und `FEEDBACK_BILD`
+  nicht `0` ist. Es entsteht im Browser (`html-to-image`, lokal), wird erst
+  beim Speichern geladen, und scheitert es, wird ohne Bild gespeichert. **Nie in
+  Apps mit Personendaten einschalten** (dort `datensparsam`).
 - **Datenschutzerklärung** des Projekts nennt (sobald es eine gibt):
   Speicherung der Anmerkungen, Ideen und KI-Fragen im Projektraum (Supabase
-  Frankfurt, KI-Fragen 30 Tage), KI-Assistent über Anthropic (Claude, USA, mit
-  Einwilligung), Zweck „Abstimmung während der Entwicklung“.
+  Frankfurt, KI-Fragen **und -Antworten** 90 Tage seit v0.17.0), KI-Assistent
+  und Rückfragen über Anthropic (Claude, USA, mit Einwilligung), bei
+  eingeschaltetem Bild der Stelle: ein Bild des angemerkten Abschnitts,
+  Zweck „Abstimmung während der Entwicklung“.
 - **Zum Livegang ausschalten:** `FEEDBACK` entfernen, neu deployen. Der Eingang
   behält die Anmerkungen.
 
@@ -245,6 +261,16 @@ Für Seiten aus reinem HTML (z. B. arbeitsschutz-doc) oder exportierte Design-Se
 Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/status`.
 
 ## Änderungen
+
+- **v0.17.0** (2026-10-20): **Bewertung, Umgebung, Bild, Rückfragen, schlanker Einbau.**
+  - **Daumen unter jeder KI-Antwort** (`POST /ki-bewertung`). Der Projektraum speichert jetzt Frage und Antwort (90 Tage); das `ende`-Ereignis trägt `frage_id`. Einwilligungstext und -Stand neu (`anthropic-2026-10b`).
+  - **Umgebung** an jeder neuen Anmerkung: Host, Gerät, Browser, System, Fenster, Pixeldichte, Farbmodus (`Umgebung` in `core/konstanten.ts`). Ersetzt die Rückfrage „Handy oder Rechner? Vorschau oder live?“.
+  - **Bild der Stelle** (`html-to-image`, lokal, dynamisch geladen, 900 px, JPEG): nur mit Status `bild`, nicht `datensparsam`, nicht `FEEDBACK_BILD=0`; scheitert es, wird ohne gespeichert. Die eigenständige Fassung hat es nicht.
+  - **Rückfragen bei knappen Anmerkungen** (`POST /nachfrage`, höchstens zwei, immer überspringbar), nur mit `KI_HILFE=1`, Status `nachfrage` und der KI-Einwilligung.
+  - **`gcf-autor` erst beim ersten Schreiben** (`kennungLesen()` legt nichts an), § 25 TDDDG.
+  - **Client-Code nur noch bei `FEEDBACK=1` im HTML:** `FeedbackWerkzeug` und `FeedbackKnopf` rendern einen winzigen Lader (`react/lader.tsx`), der den Rest im Browser nachlädt. Gemessen an bejob-landing: Seiten-JS 339 → 317 KB gz bei `FEEDBACK` aus.
+  - **Leiste am Handy zwei Zeilen** statt drei (125 → 77 px bei 390 px Breite).
+  - Neu im `FeedbackSpeicher` (alles optional): `bewerten`, `nachfrage`, `erweitert`. Der Status der Sammelstelle kennt `bild` und `nachfrage`. Ältere Sammelstellen (404) lassen alles still aus. Eigene Speicher ohne `erweitert` bekommen weder Umgebung noch Bild.
 
 - **v0.16.6** (2026-10-16): **Agentur-Anmerkungen nennen den Vornamen aus dem Zugang** statt fest „Lenny“: „Frage von Max“, „↳ Antwort von Max“, „Als Max ✕“ (`vorname`, `agenturArt` in `core/konstanten.ts`; ohne Namen weiter „Lenny“). Die Zahl am `?` sagt „Fragen an Sie“. Anlass: galdora-network stellt eigene Agentur-Zugänge für das Galdora-Team aus.
 

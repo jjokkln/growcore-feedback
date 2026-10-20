@@ -29,7 +29,7 @@ async function mitServer(handler: ReturnType<typeof feedbackNodeHandler>, lauf: 
 test("Node-Adapter: /status und Anmerkungen wie die Next-Route, Schalter aus sperrt", async () => {
   process.env.FEEDBACK = "1";
   await mitServer(feedbackNodeHandler({ speicher: { ...leer, status: async () => true } }), async (basis) => {
-    assert.deepEqual(await (await fetch(`${basis}/api/feedback/status`)).json(), { an: true, assistent: false, ideen: false });
+    assert.deepEqual(await (await fetch(`${basis}/api/feedback/status`)).json(), { an: true, assistent: false, ideen: false, bild: false, nachfrage: false });
     const liste = await fetch(`${basis}/api/feedback/anmerkungen`, { headers: { "x-gcf-autor": "11111111-2222-3333-4444-555555555555" } });
     assert.equal(liste.status, 200);
     assert.deepEqual(await liste.json(), { anmerkungen: [] });

@@ -61,8 +61,8 @@ async function leseStrom(req: IncomingMessage): Promise<string> {
   for await (const teil of req) {
     const stueck = Buffer.isBuffer(teil) ? teil : Buffer.from(teil);
     laenge += stueck.length;
-    // Eine Anmerkung hat höchstens 4.000 Zeichen und 800 Punkte; mehr ist kein Overlay.
-    if (laenge > 256_000) break;
+    // Eine Anmerkung hat höchstens 4.000 Zeichen, 800 Punkte und (0.17.0) ein Bild bis 600 KB; mehr ist kein Overlay.
+    if (laenge > 1_000_000) break;
     teile.push(stueck);
   }
   return Buffer.concat(teile).toString("utf8");

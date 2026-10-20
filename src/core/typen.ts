@@ -11,7 +11,7 @@ import { z } from "zod";
 // Konstanten und Grundtypen ohne zod (0.8.0): Der Browser braucht nur sie, und zod wöge in der
 // eigenständigen Fassung 450 KB. Hier weiter re-exportiert, damit alle Importe gleich bleiben.
 export * from "./konstanten.ts";
-import { KUNDEN_FARBEN, type Art, type Farbe, type Punkt } from "./konstanten.ts";
+import { BILD_MAX_ZEICHEN, KUNDEN_FARBEN, type Art, type Farbe, type Punkt } from "./konstanten.ts";
 
 export type Antwort = {
   id: string;
@@ -42,6 +42,8 @@ export type Anmerkung = {
   viewport_width: number | null;
   from_agency: boolean;
   author_label: string | null;
+  /** 0.17.0: Zu dieser Anmerkung liegt ein Bild der Stelle beim Eingang. Das Bild selbst sieht nur GrowCore. */
+  hat_bild?: boolean;
   eigen: boolean;
   done: boolean;
   created_at: string;
@@ -66,6 +68,24 @@ export const autorSchema = z.object({
 });
 export type Autor = z.infer<typeof autorSchema>;
 
+/** Grenzen der Umgebung (0.17.0), gespiegelt im Projektraum (`schema.ts`). */
+export const umgebungSchema = z.object({
+  host: z.string().trim().min(1).max(200),
+  geraet: z.enum(["desktop", "tablet", "handy"]),
+  browser: z.string().trim().min(1).max(60),
+  os: z.string().trim().min(1).max(60),
+  viewport_width: z.number().int().min(200).max(8000),
+  viewport_height: z.number().int().min(100).max(8000),
+  pixel_ratio: z.number().min(0.5).max(8),
+  farbmodus: z.enum(["hell", "dunkel"]).optional(),
+});
+
+/** Das Bild der Stelle als JPEG-Data-URL (0.17.0), Obergrenze `BILD_MAX_ZEICHEN`. */
+export const bildSchema = z
+  .string()
+  .max(BILD_MAX_ZEICHEN)
+  .regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/, "Das Bild muss ein JPEG sein.");
+
 /**
  * Was der Besucher anlegt. Art und Herkunft sind nicht wählbar.
  *
@@ -86,6 +106,10 @@ export const neueAnmerkungSchema = z
     viewport_width: z.number().int().min(200).max(8000).nullable(),
     /** Nur mit Lennys Zugang (0.15.0): Frage, Hinweis oder „Geändert“. */
     kind: z.enum(["question", "hint", "changed"]).optional(),
+    /** 0.17.0: Gerät und Seite. Ältere Sammelstellen kennen das Feld nicht und ignorieren es. */
+    umgebung: umgebungSchema.optional(),
+    /** 0.17.0: Bild der Stelle, nur wenn die Sammelstelle es annimmt (Status `bild`). */
+    screenshot: bildSchema.optional(),
   })
   .refine((w) => w.shape !== "pin" || Boolean(w.body), {
     message: "Ein Kommentar ohne Text wäre ein Punkt ohne Aussage.",
@@ -111,6 +135,26 @@ export const personenSchema = z.array(z.string().trim().min(1).max(80)).max(50);
 export const antwortSchema = z.object({
   body: z.string().trim().min(1, "Eine leere Antwort sagt nichts.").max(4000),
 });
+
+/** Daumen unter einer KI-Antwort (0.17.0): `frage_id` stammt aus dem `ende`-Ereignis. */
+export const bewertungSchema = z.object({
+  frage_id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
+  wert: z.union([z.literal(1), z.literal(-1)]),
+});
+export type NeueBewertung = z.infer<typeof bewertungSchema>;
+
+/**
+ * Rückfrage zu einer knappen Anmerkung (0.17.0): Text, Seite und Beschriftung der
+ * Stelle gehen an die Sammelstelle, zurück kommen null bis zwei Fragen.
+ */
+export const nachfrageSchema = z.object({
+  text: z.string().trim().max(4000).nullable(),
+  seite: pfad,
+  stelle: z.string().trim().min(1).max(120),
+  kind: z.enum(["question", "hint", "changed"]).nullish(),
+});
+export type NachfrageEingabe = z.infer<typeof nachfrageSchema>;
+export const nachfrageAntwortSchema = z.object({ fragen: z.array(z.string().trim().min(1).max(300)).max(2) });
 
 export const erledigtSchema = z.object({ done: z.boolean() });
 

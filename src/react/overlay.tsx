@@ -22,11 +22,15 @@ import {
 } from "../core/anker.ts";
 import { alsMarkdown } from "../core/export.ts";
 import { glaetteZug, type Form } from "../core/form.ts";
+import { istKnapp } from "../core/nachfrage.ts";
 import { ALLE_SEITEN, FARBNAME, FARBWERT, KUNDEN_FARBEN, agenturArt, vorname, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
 // Nur Typen: zod bleibt aus dem Browser-Bündel.
 import type { Anmerkung, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
 import { agenturAbmelden, useAgentur, type Agentur } from "./agentur.ts";
+import { stelleAlsBild } from "./bild.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
+import { useKiEinwilligung } from "./einwilligung.ts";
+import { ermittleUmgebung } from "./umgebung.ts";
 import { NEU_LADEN, offeneMelden, useEinstieg, useFaehigkeiten, useLeisteOffen, useWerkzeugAn } from "./einstieg.ts";
 import { useLocalStorageState, useMounted } from "./hooks.ts";
 import { Griff, Haken, Runter, Stift } from "./icons.tsx";
@@ -186,7 +190,9 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   const [offen, setOffen] = useState<string | null>(null);
   const [listeAufRoh, setListeAuf] = useState(false);
   /** Das Feld „Idee“ (0.12.0) — nur, wenn die Route Ideen annimmt. */
-  const { ideen } = useFaehigkeiten();
+  const { ideen, bild, nachfrage } = useFaehigkeiten();
+  /** Die Rückfragen sind KI: Sie laufen nur mit der Einwilligung, die der Assistent einholt (0.17.0). */
+  const kiErlaubt = useKiEinwilligung();
   const [ideeAufRoh, setIdeeAuf] = useState(false);
 
   // Ist die Leiste zu (über das `?` in der Navigation), gilt „Ansehen" — ohne
@@ -573,7 +579,15 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
 
   const speichere = async (eingabe: NeueAnmerkung) => {
     setLaeuft(true);
-    const antwort = await feedbackApi.anlegen(eingabe);
+    // Umgebung immer (nur Gerät und Seite, nichts Persönliches), Bild nur, wenn die Sammelstelle
+    // es annimmt, die App nicht datensparsam ist und es keine Anmerkung von Lenny ist (0.17.0).
+    let ergaenzt: NeueAnmerkung = { ...eingabe, umgebung: ermittleUmgebung() };
+    if (bild && !einstellung.datensparsam && !lenny && eingabe.anchor_selector !== "body") {
+      const anker = findeAnker(eingabe.anchor_selector);
+      const screenshot = anker ? await stelleAlsBild(anker) : null;
+      if (screenshot) ergaenzt = { ...ergaenzt, screenshot };
+    }
+    const antwort = await feedbackApi.anlegen(ergaenzt);
     setLaeuft(false);
     if (!antwort.ok) {
       setMeldung(antwort.fehler);
@@ -1086,8 +1100,12 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
           farbe={zeichenFarbe}
           lennyArt={lenny ? lennyArt : undefined}
           laeuft={laeuft}
+          nachfrageMoeglich={nachfrage && kiErlaubt && !lenny}
           onAbbruch={() => setEntwurf(null)}
           onSpeichern={entwurfAbschicken}
+          onNachfragen={(text) =>
+            feedbackApi.nachfrage({ text: text || null, seite: pfad, stelle: entwurf.anchor_label })
+          }
           onFormTauschen={
             entwurf.geglaettet && entwurf.freihand
               ? () =>
@@ -1401,6 +1419,7 @@ function Leiste(props: {
     >
       <div
         role="toolbar"
+        className="gcf-balken"
         aria-label="Werkzeuge für Anmerkungen"
         style={{
           display: "flex",
@@ -1438,6 +1457,7 @@ function Leiste(props: {
               key={m.wert}
               type="button"
               role="radio"
+              className="gcf-lb"
               aria-checked={props.modus === m.wert}
               title={m.hinweis}
               onClick={() => props.setModus(m.wert)}
@@ -1457,6 +1477,7 @@ function Leiste(props: {
         {props.ideen && !props.lenny && (
           <button
             type="button"
+            className="gcf-lb"
             style={knopfStil}
             aria-pressed={props.ideeAuf}
             title="Eine Idee oder einen Wunsch an Lenny schicken — ohne bestimmte Stelle"
@@ -1524,6 +1545,7 @@ function Leiste(props: {
         <div style={{ display: "flex", gap: 4, paddingLeft: 6, borderLeft: `1px solid ${T.kante}` }}>
           <button
             type="button"
+            className="gcf-lb"
             style={knopfStil}
             aria-pressed={props.listeAuf}
             aria-label={`Liste der Anmerkungen, ${props.offeneAnzahl} offen`}
@@ -1534,7 +1556,7 @@ function Leiste(props: {
 
           {/* Ein echtes Kästchen, nur neu gezeichnet: Tastatur, Leertaste und
               Screenreader kommen vom Browser (styles.css, `.gcf-haken`). */}
-          <label className="gcf-haken" style={{ ...knopfStil, color: props.zeigeErledigte ? T.text : T.leise }}>
+          <label className="gcf-haken gcf-lb" style={{ ...knopfStil, color: props.zeigeErledigte ? T.text : T.leise }}>
             <input
               type="checkbox"
               checked={props.zeigeErledigte}
@@ -1571,6 +1593,7 @@ function Leiste(props: {
         {knoepfe === 0 && (
           <button
             type="button"
+            className="gcf-lb"
             style={{ ...knopfStil, display: "inline-flex", alignItems: "center", gap: 4 }}
             onClick={() => {
               props.setModus("ansehen");
@@ -1578,10 +1601,11 @@ function Leiste(props: {
               setOffen(false);
             }}
             aria-expanded
+            aria-label="Leiste einklappen"
             title="Leiste einklappen — der Stift unten links holt sie zurück"
           >
             <Runter size={14} />
-            Einklappen
+            <span className="gcf-nur-breit">Einklappen</span>
           </button>
         )}
       </div>
@@ -1762,6 +1786,9 @@ function EntwurfsFeld(props: {
   entwurf: Entwurf;
   farbe: KundenFarbe | "blau";
   laeuft: boolean;
+  /** 0.17.0: Die Sammelstelle fragt bei knappen Anmerkungen nach, und die Person hat der KI zugestimmt. */
+  nachfrageMoeglich?: boolean;
+  onNachfragen?: (text: string) => Promise<string[]>;
   onAbbruch: () => void;
   onSpeichern: (text: string, name: string) => void | Promise<void>;
   /** Nur bei geglätteter Form: zwischen Form und Freihand wechseln (0.13.0). */
@@ -1783,9 +1810,34 @@ function EntwurfsFeld(props: {
   const nameFehlt = mitNamen && !mitAuswahl && !gespeicherterName();
   const feldRef = useRef<HTMLTextAreaElement>(null);
 
+  // Rückfragen bei knappen Anmerkungen (0.17.0). Einmal je Entwurf; danach speichert jeder Klick,
+  // auch unverändert („Trotzdem speichern“) — die Fragen sind ein Angebot, keine Hürde.
+  const [fragen, setFragen] = useState<string[]>([]);
+  const [fragtGerade, setFragtGerade] = useState(false);
+  const [gefragt, setGefragt] = useState(false);
+  const [textBeiFragen, setTextBeiFragen] = useState<string | null>(null);
+
   useEffect(() => {
     feldRef.current?.focus();
   }, []);
+
+  const speichern = async () => {
+    const t = text.trim();
+    const nurEinkreisen = Boolean(props.entwurf.zug) && !t;
+    if (props.nachfrageMoeglich && props.onNachfragen && !gefragt && !nurEinkreisen && istKnapp(t)) {
+      setGefragt(true);
+      setFragtGerade(true);
+      const liste = await props.onNachfragen(t).catch(() => []);
+      setFragtGerade(false);
+      if (liste.length > 0) {
+        setFragen(liste);
+        setTextBeiFragen(t);
+        feldRef.current?.focus();
+        return;
+      }
+    }
+    await props.onSpeichern(t, name);
+  };
 
   // Am Rand kippt das Feld nach innen, statt aus dem Fenster zu laufen.
   const breite = 290;
@@ -1858,7 +1910,7 @@ function EntwurfsFeld(props: {
           // Enter speichert, Umschalt+Enter macht einen Absatz.
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            if (darf) void props.onSpeichern(text.trim(), name);
+            if (darf && !fragtGerade) void speichern();
           }
         }}
         style={{
@@ -1873,6 +1925,21 @@ function EntwurfsFeld(props: {
           resize: "vertical",
         }}
       />
+      {/* Aus der Rückfrage wird kein Pflichtfeld: Wer nichts ergänzt, speichert so, wie es ist. */}
+      <div role="status" aria-live="polite">
+        {fragtGerade && <p style={{ ...kleinStil, marginTop: 6 }}>Die KI überlegt, was noch fehlen könnte …</p>}
+        {fragen.length > 0 && (
+          <div className="gcf-rueckfragen">
+            <p className="gcf-rueckfragen-titel">Kurze Rückfrage (die KI hilft beim Formulieren):</p>
+            <ul>
+              {fragen.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
+            <p className="gcf-klein">Ergänze es oben, oder speichere so, wie es ist.</p>
+          </div>
+        )}
+      </div>
       {props.einstellung.hinweis && (
         <p style={{ margin: "6px 0 0", font: `400 12px/1.4 ${T.schrift}`, color: T.leise }}>{props.einstellung.hinweis}</p>
       )}
@@ -1943,8 +2010,8 @@ function EntwurfsFeld(props: {
         </button>
         <button
           type="button"
-          disabled={!darf || props.laeuft}
-          onClick={() => void props.onSpeichern(text.trim(), name)}
+          disabled={!darf || props.laeuft || fragtGerade}
+          onClick={() => void speichern()}
           style={{
             ...knopfStil,
             background: T.primaer,
@@ -1955,7 +2022,15 @@ function EntwurfsFeld(props: {
             cursor: darf ? "pointer" : "not-allowed",
           }}
         >
-          {props.laeuft ? "Speichert…" : props.entwurf.zug && !text.trim() ? "Nur einkreisen" : "Speichern"}
+          {props.laeuft
+            ? "Speichert…"
+            : fragtGerade
+              ? "Einen Moment …"
+              : fragen.length > 0 && text.trim() === textBeiFragen
+                ? "Trotzdem speichern"
+                : props.entwurf.zug && !text.trim()
+                  ? "Nur einkreisen"
+                  : "Speichern"}
         </button>
       </div>
     </aside>

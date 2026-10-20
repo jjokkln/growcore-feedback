@@ -1,6 +1,6 @@
 {
   "name": "@growcore/feedback",
-  "version": "0.16.6",
+  "version": "0.17.0",
   "description": "Feedback-Werkzeug für GrowCore-Projekte in Entwicklung: Anmerkungen in beide Richtungen (Kommentar, Einkreisen, Antworten), Ideen und KI-Assistent. Alles landet im zentralen Eingang des Projektraums.",
   "license": "UNLICENSED",
   "private": true,
@@ -41,6 +41,7 @@
     "standalone": "node scripts/standalone.mjs"
   },
   "dependencies": {
+    "html-to-image": "^1.11.13",
     "zod": "^4.1.0"
   },
   "devDependencies": {

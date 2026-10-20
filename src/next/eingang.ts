@@ -107,12 +107,18 @@ export async function eingangStrom(
  * - Alles andere (kein Schlüssel, abgewiesen, nicht erreichbar) → „aus".
  *   Lieber kein Werkzeug als eines, das bei jedem Klick einen Fehler zeigt.
  *
- * Assistent und „Idee“ (0.16.2) nur, wenn die Sammelstelle sie ausdrücklich
+ * Assistent, „Idee“ (0.16.2), Bild und Nachfrage (0.17.0) nur, wenn die Sammelstelle sie ausdrücklich
  * meldet: Der Projektraum sagt `assistent: true, ideen: true`, galdora-network
  * (eigener Eingang ohne diese Pfade) sagt nichts davon.
  */
-export async function eingangStatus(): Promise<{ an: boolean; assistent: boolean; ideen: boolean }> {
-  const aus = { an: false, assistent: false, ideen: false };
+export async function eingangStatus(): Promise<{
+  an: boolean;
+  assistent: boolean;
+  ideen: boolean;
+  bild: boolean;
+  nachfrage: boolean;
+}> {
+  const aus = { an: false, assistent: false, ideen: false, bild: false, nachfrage: false };
   const schluessel = process.env.GROWCORE_FEEDBACK_KEY?.trim();
   if (!schluessel) return aus;
   const basis = (process.env.GROWCORE_FEEDBACK_URL?.trim() || STANDARD_URL).replace(/\/$/, "");
@@ -121,13 +127,25 @@ export async function eingangStatus(): Promise<{ an: boolean; assistent: boolean
       headers: { authorization: `Bearer ${schluessel}` },
       cache: "no-store",
     });
-    if (antwort.status === 404) return { an: true, assistent: false, ideen: false };
+    if (antwort.status === 404) return { ...aus, an: true };
     if (!antwort.ok) {
       if (antwort.status === 401) console.error("[feedback] Schlüssel abgewiesen — GROWCORE_FEEDBACK_KEY prüfen.");
       return aus;
     }
-    const daten = (await antwort.json().catch(() => ({}))) as { an?: unknown; assistent?: unknown; ideen?: unknown };
-    return { an: daten.an === true, assistent: daten.assistent === true, ideen: daten.ideen === true };
+    const daten = (await antwort.json().catch(() => ({}))) as {
+      an?: unknown;
+      assistent?: unknown;
+      ideen?: unknown;
+      bild?: unknown;
+      nachfrage?: unknown;
+    };
+    return {
+      an: daten.an === true,
+      assistent: daten.assistent === true,
+      ideen: daten.ideen === true,
+      bild: daten.bild === true,
+      nachfrage: daten.nachfrage === true,
+    };
   } catch (e) {
     console.error("[feedback] Eingang nicht erreichbar:", e instanceof Error ? e.message : e);
     return aus;

@@ -1,7 +1,8 @@
 import type { Stelle } from "../core/assistent.ts";
-import type { Anmerkung, Antwort, Autor, KiNachricht, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
+import type { Anmerkung, Antwort, Autor, KiNachricht, NachfrageEingabe, NeueAnmerkung, NeueBewertung, NeueIdee } from "../core/typen.ts";
 import type { SammelstellenWissen } from "./anweisungen.ts";
 import { eingang, eingangPersonen, eingangStatus, eingangStrom } from "./eingang.ts";
+import { nachfrageAntwortSchema } from "../core/typen.ts";
 
 /** Eine Anmerkung samt Kennung des Autors, wie der Server sie kennt. Die Kennung geht nie zum Browser. */
 export type Zeile = Omit<Anmerkung, "eigen" | "replies"> & {
@@ -57,6 +58,22 @@ export interface FeedbackSpeicher {
    */
   assistent?(anfrage: AssistentAnfrage, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>>;
   /**
+   * Optional (0.17.0): Daumen unter einer KI-Antwort. Nur die Sammelstelle, die den
+   * Assistenten beantwortet, kennt die Frage.
+   */
+  bewerten?(bewertung: NeueBewertung, autor: Autor | null): Promise<void>;
+  /**
+   * Optional (0.17.0): Rückfragen zu einer knappen Anmerkung (0 bis 2). Leer =
+   * der Text reicht. Ohne diese Funktion gibt es den Schritt nicht.
+   */
+  nachfrage?(eingabe: NachfrageEingabe): Promise<string[]>;
+  /**
+   * 0.17.0: Der Speicher nimmt `umgebung` und `screenshot` einer neuen Anmerkung an.
+   * Ohne dieses Kennzeichen entfernt die Route beides, bevor `anlegen` aufgerufen
+   * wird: Ein eigener Speicher kennt die Spalten nicht und soll nicht scheitern.
+   */
+  erweitert?: boolean;
+  /**
    * Optional (0.12.0): eine Idee an die Sammelstelle (im Projektraum ein Vorschlag).
    * Ohne diese Funktion zeigt das Overlay keinen Knopf „Idee“.
    */
@@ -80,7 +97,15 @@ export interface FeedbackSpeicher {
 }
 
 /** Was die Sammelstelle meldet (0.16.2). Fehlt ein Feld, gilt „kann es“. */
-export type SammelstellenStatus = { an: boolean; assistent?: boolean; ideen?: boolean };
+export type SammelstellenStatus = {
+  an: boolean;
+  assistent?: boolean;
+  ideen?: boolean;
+  /** 0.17.0: Die Sammelstelle nimmt Bilder der Stelle an (Projektschalter). */
+  bild?: boolean;
+  /** 0.17.0: Die Sammelstelle beantwortet Rückfragen zu knappen Anmerkungen. */
+  nachfrage?: boolean;
+};
 
 /** Der Standard: alles über den Projektschlüssel an den Eingang im Projektraum. */
 export const eingangsSpeicher: FeedbackSpeicher = {
@@ -108,6 +133,15 @@ export const eingangsSpeicher: FeedbackSpeicher = {
   idee: async (idee, autor) => {
     await eingang("/ideen", { method: "POST", body: { ...idee, author: autor } });
   },
+  bewerten: async (bewertung, autor) => {
+    await eingang("/ki-bewertung", { method: "POST", body: { ...bewertung, ...(autor ? { author: autor } : {}) } });
+  },
+  nachfrage: async (eingabe) => {
+    const antwort = await eingang<unknown>("/nachfrage", { method: "POST", body: eingabe });
+    const geprueft = nachfrageAntwortSchema.safeParse(antwort);
+    return geprueft.success ? geprueft.data.fragen : [];
+  },
+  erweitert: true,
   status: eingangStatus,
   personen: eingangPersonen,
 };

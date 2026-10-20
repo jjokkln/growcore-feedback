@@ -2,6 +2,8 @@ import {
   antwortSchema,
   assistentEingabeSchema,
   autorSchema,
+  bewertungSchema,
+  nachfrageSchema,
   erledigtSchema,
   ideeSchema,
   neueAnmerkungSchema,
@@ -37,6 +39,11 @@ import { eingangsSpeicher, type FeedbackSpeicher, type SammelstellenStatus, type
  * 3. **Wie viel?** Je Besucher 40 Schreibvorgänge und 30 Fragen an den
  *    Assistenten je Stunde; die Grenzen je Projekt setzt der Eingang.
  * 4. **Was?** zod, dieselben Grenzen wie im Eingang.
+ *
+ * Neu in 0.17.0: `ki-bewertung` (Daumen), `nachfrage` (Rückfragen zu knappen
+ * Anmerkungen), `umgebung` und `screenshot` an neuen Anmerkungen. Alles
+ * hängt am Status der Sammelstelle; ältere Sammelstellen (404) lassen es still aus.
+ * `FEEDBACK_BILD=0` schaltet das Bild in dieser App aus, egal was die Sammelstelle sagt.
  */
 
 export interface FeedbackRouteOptionen {
@@ -150,6 +157,13 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     Boolean(optionen.ki && speicher.assistent && process.env.KI_HILFE === "1") &&
     (await sammelstelle()).assistent !== false;
   const ideenAn = async () => Boolean(speicher.idee) && (await sammelstelle()).ideen !== false;
+  // Bild und Nachfrage (0.17.0): nur, wenn die Sammelstelle sie ausdrücklich meldet. Das Bild
+  // kann diese App zusätzlich mit `FEEDBACK_BILD=0` abstellen; die Nachfrage ist KI und
+  // braucht deshalb `KI_HILFE=1` (dieselbe Einwilligung wie beim Assistenten).
+  const bildAn = async () =>
+    Boolean(speicher.erweitert) && process.env.FEEDBACK_BILD !== "0" && (await sammelstelle()).bild === true;
+  const nachfrageAn = async () =>
+    Boolean(speicher.nachfrage) && process.env.KI_HILFE === "1" && (await sammelstelle()).nachfrage === true;
 
   // Die Personenliste, ebenso 30 s gemerkt: Das Overlay fragt sie bei jedem Öffnen.
   let personen: { liste: string[]; bis: number } | null = null;
@@ -169,7 +183,13 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
       // Ohne Anmeldung beantwortbar: Es verrät nur, ob das `?` erscheinen soll,
       // und welche Teile (0.12.0) — Assistent und „Idee“ hängen am Speicher.
       if (!(await zentralAn())) return json({ an: false });
-      return json({ an: true, assistent: await assistentAn(), ideen: await ideenAn() });
+      return json({
+        an: true,
+        assistent: await assistentAn(),
+        ideen: await ideenAn(),
+        bild: await bildAn(),
+        nachfrage: await nachfrageAn(),
+      });
     }
     if (!(await zentralAn())) return fehler(404, "Das Feedback-Werkzeug ist ausgeschaltet.");
 
@@ -181,6 +201,8 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
       if (bereich === "personen" && methode === "GET" && !id) return json({ personen: await personenListe() });
       if (bereich === "assistent" && methode === "POST" && !id) return await assistent(request, autor);
       if (bereich === "ideen" && methode === "POST" && !id) return await idee(request, autor);
+      if (bereich === "ki-bewertung" && methode === "POST" && !id) return await bewertung(request, autor);
+      if (bereich === "nachfrage" && methode === "POST" && !id) return await nachfrage(request, autor);
       return fehler(404, "Nicht gefunden.");
     } catch (e) {
       if (e instanceof EingangFehler) return fehler(e.status, e.message);
@@ -209,7 +231,12 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     if (methode === "POST" && !id) {
       const eingabe = neueAnmerkungSchema.safeParse(await leseJson(request));
       if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Anmerkung.");
-      const anmerkung = await speicher.anlegen(eingabe.data, autor, agenturAus(request));
+      // Umgebung und Bild (0.17.0): nur an einen Speicher, der sie kennt, und das Bild nur bei „bild an“.
+      const { umgebung, screenshot, ...kern } = eingabe.data;
+      const neu = speicher.erweitert
+        ? { ...kern, ...(umgebung ? { umgebung } : {}), ...(screenshot && (await bildAn()) ? { screenshot } : {}) }
+        : kern;
+      const anmerkung = await speicher.anlegen(neu, autor, agenturAus(request));
       return json({ anmerkung: zuBrowser(anmerkung, autor.ref) }, 201);
     }
 
@@ -274,6 +301,27 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
     if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Idee.");
     await speicher.idee(eingabe.data, autor);
     return json({ ok: true }, 201);
+  }
+
+  async function bewertung(request: Request, autor: Autor | null): Promise<Response> {
+    if (!speicher.bewerten || !(await assistentAn())) return fehler(404, "Nicht gefunden.");
+    if (!bremse(`schreiben:${schluessel(request, autor)}`, 40, 3_600_000)) {
+      return fehler(429, "Das waren viele Bewertungen in kurzer Zeit. Bitte etwas später weitermachen.");
+    }
+    const eingabe = bewertungSchema.safeParse(await leseJson(request));
+    if (!eingabe.success) return fehler(400, "Ungültige Bewertung.");
+    await speicher.bewerten(eingabe.data, autor);
+    return json({ ok: true });
+  }
+
+  async function nachfrage(request: Request, autor: Autor | null): Promise<Response> {
+    if (!speicher.nachfrage || !(await nachfrageAn())) return fehler(404, "Nicht gefunden.");
+    if (!bremse(`ki:${schluessel(request, autor)}`, 30, 3_600_000)) {
+      return fehler(429, "Das waren viele Fragen in kurzer Zeit. Bitte in einer Stunde wieder versuchen.");
+    }
+    const eingabe = nachfrageSchema.safeParse(await leseJson(request));
+    if (!eingabe.success) return fehler(400, eingabe.error.issues[0]?.message ?? "Ungültige Anfrage.");
+    return json({ fragen: await speicher.nachfrage(eingabe.data) });
   }
 
   return {

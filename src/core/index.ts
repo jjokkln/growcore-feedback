@@ -4,3 +4,4 @@ export * from "./export.ts";
 export * from "./ziele.ts";
 export * from "./ki-antwort.ts";
 export * from "./assistent.ts";
+export * from "./nachfrage.ts";

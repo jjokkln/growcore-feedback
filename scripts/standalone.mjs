@@ -14,7 +14,11 @@ await build({
   target: "es2020",
   jsx: "automatic",
   loader: { ".css": "text" },
-  alias: { "next/navigation": hier("../src/standalone/navigation.ts") },
+  alias: {
+    "next/navigation": hier("../src/standalone/navigation.ts"),
+    // Kein Bild der Stelle in der eigenständigen Fassung (0.17.0), spart die Bibliothek im Skript.
+    "html-to-image": hier("../src/standalone/ohne-bild.ts"),
+  },
   define: { "process.env.NODE_ENV": '"production"' },
   legalComments: "none",
   logLevel: "warning",

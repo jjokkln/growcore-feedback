@@ -683,3 +683,83 @@
 .gcf-frage-zahl.gcf-frage-lenny {
   background: #1f5f9e;
 }
+
+/* ── Daumen unter einer KI-Antwort (0.17.0) ──────────────────────────────── */
+.gcf-daumen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.gcf-daumen-frage {
+  font: 400 11px/1.4 var(--gcf-schrift);
+  color: var(--gcf-leise);
+}
+.gcf-daumen-knopf {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--gcf-kante);
+  border-radius: 7px;
+  background: var(--gcf-flaeche);
+  color: var(--gcf-text);
+  cursor: pointer;
+}
+.gcf-daumen-knopf:hover {
+  background: var(--gcf-muted);
+}
+.gcf-daumen-knopf[aria-pressed="true"] {
+  background: var(--gcf-primaer);
+  border-color: var(--gcf-primaer);
+  color: var(--gcf-primaer-text);
+}
+.gcf-daumen-danke {
+  font: 400 11px/1.4 var(--gcf-schrift);
+  color: var(--gcf-leise);
+}
+
+/* ── Rückfragen zu knappen Anmerkungen (0.17.0) ──────────────────────────── */
+.gcf-rueckfragen {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--gcf-kante);
+  border-radius: 8px;
+  background: var(--gcf-muted);
+  color: var(--gcf-text);
+}
+.gcf-rueckfragen-titel {
+  margin: 0 0 4px;
+  font: 600 12px/1.4 var(--gcf-schrift);
+}
+.gcf-rueckfragen ul {
+  margin: 0 0 4px;
+  padding-left: 18px;
+  font: 400 13px/1.45 var(--gcf-schrift);
+}
+.gcf-rueckfragen .gcf-klein {
+  margin: 0;
+}
+
+/* ── Leiste auf dem Handy: zwei Zeilen statt drei (0.17.0) ───────────────── */
+/* Die Maße stehen als Inline-Stil am Knopf; das Handy überstimmt sie mit
+   `!important`. Der Text von „Einklappen“ fällt weg, das Symbol bleibt (aria-label). */
+@media (max-width: 767px) {
+  .gcf-balken {
+    gap: 4px 6px !important;
+    padding: 6px !important;
+  }
+  .gcf-balken .gcf-lb {
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+  }
+  .gcf-balken [role="radiogroup"][aria-label="Farbe"],
+  .gcf-balken [role="radiogroup"][aria-label="Art"] {
+    padding-left: 4px !important;
+  }
+  .gcf-balken .gcf-nur-breit {
+    display: none;
+  }
+}
