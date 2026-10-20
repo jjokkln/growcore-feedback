@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -1839,37 +1839,121 @@ function EntwurfsFeld(props: {
     await props.onSpeichern(t, name);
   };
 
-  // Am Rand kippt das Feld nach innen, statt aus dem Fenster zu laufen.
-  const breite = 290;
-  const links = Math.min(Math.max(props.entwurf.x - 10, 12), window.innerWidth - breite - 12);
-  const obenStatt = props.entwurf.y + 240 > window.innerHeight;
+  // Lage (0.17.1): Das Fenster liegt immer ganz im sichtbaren Bereich, auch wenn es durch Rückfragen
+  // wächst, und lässt sich über den Griff oben rechts verschieben. Kopf (mit Griff) und Knöpfe stehen
+  // außerhalb der Scrollfläche, damit beides immer erreichbar bleibt.
+  const breite = Math.min(290, window.innerWidth - 16);
+  const asideRef = useRef<HTMLElement>(null);
+  const [lage, setLage] = useState<Versatz | null>(null);
+  const lageRef = useRef<Versatz | null>(null);
+  lageRef.current = lage;
+
+  const einpassen = (p: Versatz): Versatz => {
+    const box = asideRef.current?.getBoundingClientRect();
+    const w = box?.width ?? breite;
+    const h = box?.height ?? 0;
+    return {
+      x: Math.round(Math.min(Math.max(p.x, 8), Math.max(8, window.innerWidth - w - 8))),
+      y: Math.round(Math.min(Math.max(p.y, 8), Math.max(8, window.innerHeight - h - 8))),
+    };
+  };
+  /** Wo es ohne Zug stehen würde: unter dem Absetzpunkt, am unteren Rand darüber. */
+  const grundLage = (): Versatz => {
+    const h = asideRef.current?.getBoundingClientRect().height ?? 240;
+    const unten = props.entwurf.y + 14 + h <= window.innerHeight - 8;
+    return einpassen({ x: props.entwurf.x - 10, y: unten ? props.entwurf.y + 14 : props.entwurf.y - h - 14 });
+  };
+
+  useLayoutEffect(() => {
+    setLage(grundLage());
+    const el = asideRef.current;
+    if (!el) return;
+    const nachmessen = () => setLage((l) => (l ? einpassen(l) : l));
+    const beobachter = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(nachmessen);
+    beobachter?.observe(el);
+    window.addEventListener("resize", nachmessen);
+    return () => {
+      beobachter?.disconnect();
+      window.removeEventListener("resize", nachmessen);
+    };
+    // Nur beim Öffnen: Danach bestimmt die Person die Lage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const ziehen = (e: React.PointerEvent) => {
+    const start = lageRef.current ?? grundLage();
+    ziehenStarten(e, { beiZug: (d) => setLage(einpassen({ x: start.x + d.x, y: start.y + d.y })) });
+  };
   const darf = Boolean(text.trim() || props.entwurf.zug) && (!mitAuswahl || Boolean(name.trim()));
 
   return (
     <aside
+      ref={asideRef}
       {...{ [OVERLAY_ATTR]: "" }}
       role="dialog"
       aria-label="Neue Anmerkung"
       style={{
         position: "fixed",
-        left: links,
-        top: obenStatt ? undefined : props.entwurf.y + 14,
-        bottom: obenStatt ? window.innerHeight - props.entwurf.y + 14 : undefined,
+        left: lage?.x ?? 12,
+        top: lage?.y ?? 12,
+        visibility: lage ? "visible" : "hidden",
         width: breite,
+        maxHeight: "calc(100vh - 16px)",
+        display: "flex",
+        flexDirection: "column",
         zIndex: EBENE + 3,
         background: T.flaeche,
         color: T.text,
         border: `1px solid ${T.kante}`,
         borderTop: `3px solid ${FARBWERT[props.farbe]}`,
         borderRadius: 10,
-        padding: 12,
         boxShadow: "0 8px 30px rgba(0,0,0,.2)",
       }}
     >
-      <p style={{ ...kleinStil, fontWeight: 600, marginBottom: 6 }}>
-        {props.entwurf.zug ? "Eingekreist · " : ""}
-        {props.entwurf.anchor_label}
-      </p>
+      {/* Kopfzeile mit Griff oben rechts: Ziehen verschiebt, Pfeiltasten am Griff auch, Doppelklick legt zurück. */}
+      <div
+        onPointerDown={(e) => {
+          if ((e.target as Element).closest("button")) return;
+          e.preventDefault();
+          ziehen(e);
+        }}
+        style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 12px 6px", cursor: "grab", touchAction: "none" }}
+      >
+        <p style={{ ...kleinStil, fontWeight: 600, flex: 1, margin: 0 }}>
+          {props.entwurf.zug ? "Eingekreist · " : ""}
+          {props.entwurf.anchor_label}
+        </p>
+        <button
+          type="button"
+          aria-label="Fenster verschieben (Pfeiltasten), Doppelklick legt es zurück"
+          title="Ziehen zum Verschieben · Doppelklick: zurück"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            ziehen(e);
+          }}
+          onKeyDown={(e) => {
+            const d = pfeilVersatz(e);
+            if (!d) return;
+            e.preventDefault();
+            const von = lageRef.current ?? grundLage();
+            setLage(einpassen({ x: von.x + d.x, y: von.y + d.y }));
+          }}
+          onDoubleClick={() => setLage(grundLage())}
+          style={{
+            ...knopfStil,
+            border: "none",
+            background: "transparent",
+            padding: 4,
+            color: T.leise,
+            cursor: "grab",
+            alignSelf: "flex-start",
+            touchAction: "none",
+          }}
+        >
+          <Griff size={16} />
+        </button>
+      </div>
+      <div style={{ padding: "0 12px", overflowY: "auto", minHeight: 0, flex: "1 1 auto" }}>
       {props.entwurf.global && (
         <p style={{ ...kleinStil, marginTop: -2, marginBottom: 6 }}>Kopf- oder Fußbereich: steht auf allen Seiten.</p>
       )}
@@ -2004,7 +2088,8 @@ function EntwurfsFeld(props: {
           }}
         />
       )}
-      <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+      </div>
+      <div style={{ display: "flex", gap: 6, padding: "8px 12px 12px", justifyContent: "flex-end" }}>
         <button type="button" style={knopfStil} onClick={props.onAbbruch}>
           {props.entwurf.zug ? "Verwerfen" : "Abbrechen"}
         </button>
