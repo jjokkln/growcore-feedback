@@ -63,6 +63,27 @@ function freiBis(): number {
   return window.innerHeight;
 }
 
+/**
+ * Holt die Stelle ins Bild, ohne die Seite zu verschieben (0.18.0). `scrollIntoView`
+ * scrollt auch Rahmen mit `overflow: hidden` (Boltwork: `h-dvh overflow-hidden` um
+ * die ganze App) — danach war oben ein Stück abgeschnitten und nicht mehr
+ * erreichbar. Hier nur, wenn die Stelle nicht schon sichtbar ist, und nur am
+ * nächsten Vorfahren, der wirklich scrollt (auto/scroll), sonst am Fenster.
+ */
+function sichtbarMachen(el: Element, frei: number) {
+  const r = el.getBoundingClientRect();
+  if (r.top >= 12 && r.bottom <= frei - 12) return;
+  const delta = r.top - Math.max(12, (frei - r.height) / 2);
+  const behavior: ScrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight + 1) {
+      p.scrollBy({ top: delta, behavior });
+      return;
+    }
+  }
+  window.scrollBy({ top: delta, behavior });
+}
+
 export function starteFuehrung(schritte: Schritt[], ab = 0) {
   window.dispatchEvent(
     new CustomEvent<Stand>(FUEHRUNG_EREIGNIS, {
@@ -71,12 +92,11 @@ export function starteFuehrung(schritte: Schritt[], ab = 0) {
   );
 }
 
-/** Ablauf eines Zeiger-Durchgangs in ms: hingleiten, klicken, kurz stehen, ausblenden. */
+/** Zeiger in ms: einmal hingleiten, dann klicken und kurz stehen, im Wechsel bis zum echten Klick. */
 const GLEITEN = 900;
 const KLICK = 650;
-const STEHEN = 650;
-const AUS = 250;
-const DURCHGANG = GLEITEN + KLICK + STEHEN + AUS;
+const STEHEN = 750;
+const TAKT = KLICK + STEHEN;
 
 function sanft(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -150,14 +170,7 @@ export function Fuehrung({
       setGefunden(treffer ? (treffer.vorstufe ? "vorstufe" : "ja") : "nein");
       if (treffer && treffer.el !== zuletzt) {
         zuletzt = treffer.el;
-        const frei = freiBis();
-        if (frei < window.innerHeight) {
-          // In die Mitte des FREIEN Bereichs, nicht des Bildschirms.
-          const r = treffer.el.getBoundingClientRect();
-          window.scrollTo({ top: window.scrollY + r.top - Math.max(12, (frei - r.height) / 2), behavior: "smooth" });
-        } else {
-          treffer.el.scrollIntoView({ block: "center", behavior: "smooth" });
-        }
+        sichtbarMachen(treffer.el, freiBis());
       }
     };
     // Erster Lauf nicht synchron im Effekt (react-hooks/set-state-in-effect).
@@ -210,11 +223,12 @@ export function Fuehrung({
           const zy = box.top + box.height / 2;
           const sx = start.x;
           const sy = start.y;
-          const t = ruhig ? GLEITEN + KLICK : (jetzt - durchgang.t0) % DURCHGANG;
+          const t = ruhig ? GLEITEN + KLICK : jetzt - durchgang.t0;
           const g = sanft(Math.min(1, t / GLEITEN));
           const x = sx + (zx - sx) * g;
           const y = sy + (zy - sy) * g;
-          const c = t - GLEITEN;
+          // Nach dem Hingleiten nur noch der Klick, immer wieder.
+          const c = t < GLEITEN ? -1 : (t - GLEITEN) % TAKT;
           let druck = 1;
           let wellen = 0;
           let deckung = 1;
@@ -223,7 +237,6 @@ export function Fuehrung({
             else if (c >= 120 && c < 280) druck = 0.8 + 0.2 * ((c - 120) / 160);
             if (c >= 90 && c < KLICK) wellen = (c - 90) / (KLICK - 90);
             if (t < 150) deckung = t / 150;
-            else if (t > DURCHGANG - AUS) deckung = Math.max(0, (DURCHGANG - t) / AUS);
           }
           zeiger.style.display = "block";
           zeiger.style.opacity = String(deckung);
@@ -276,6 +289,17 @@ export function Fuehrung({
       window.removeEventListener("keydown", beiTaste);
     };
   }, [schritt, setStand]);
+
+  // Neuer Schritt: Leiste leuchtet kurz auf, die Schrittzahl springt (0.18.0).
+  // Ohne das übersahen manche, dass sich der Text geändert hat.
+  const index = stand?.index ?? -1;
+  useEffect(() => {
+    const karte = karteRef.current;
+    if (!karte || index < 0) return;
+    karte.classList.remove("gcf-karte-neu");
+    void karte.offsetWidth;
+    karte.classList.add("gcf-karte-neu");
+  }, [index]);
 
   if (!stand || !schritt) return null;
   const letzter = stand.index === stand.schritte.length - 1;

@@ -635,9 +635,55 @@ Error generating stack: `+l.message+`
 }
 .gcf-schritt-zahl {
   flex: none;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--gcf-primaer);
+  color: var(--gcf-primaer-text);
   font: 600 12px/1 var(--gcf-schrift);
   font-variant-numeric: tabular-nums;
-  color: var(--gcf-leise);
+}
+/* Neuer Schritt: kurzes Aufleuchten der Leiste, die Zahl springt. */
+@media (prefers-reduced-motion: no-preference) {
+  .gcf-karte-neu {
+    animation: gcf-karte-neu 1.1s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  .gcf-karte-neu .gcf-schritt-zahl {
+    animation: gcf-zahl-neu 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .gcf-karte-neu .gcf-karte-text {
+    animation: gcf-schritt 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gcf-karte-neu {
+    outline: 3px solid var(--gcf-primaer);
+    outline-offset: 0;
+  }
+}
+@keyframes gcf-karte-neu {
+  0% {
+    scale: 0.96;
+    box-shadow: 0 0 0 0 var(--gcf-primaer), 0 20px 50px rgba(0, 0, 0, 0.25);
+  }
+  25% {
+    scale: 1.03;
+    box-shadow: 0 0 0 4px var(--gcf-primaer), 0 20px 50px rgba(0, 0, 0, 0.25);
+  }
+  100% {
+    scale: 1;
+    box-shadow: 0 0 0 0 transparent, 0 20px 50px rgba(0, 0, 0, 0.25);
+  }
+}
+@keyframes gcf-zahl-neu {
+  0% {
+    scale: 0.6;
+  }
+  60% {
+    scale: 1.25;
+  }
+  100% {
+    scale: 1;
+  }
 }
 .gcf-karte-zu {
   width: 30px;
