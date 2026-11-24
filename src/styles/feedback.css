@@ -600,6 +600,30 @@
   padding: 0 10px;
   font-size: 13px;
 }
+.gcf-karte-unten {
+  padding-left: 4px;
+}
+.gcf-karte-griff {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 30px;
+  margin-right: -4px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gcf-leise);
+  cursor: grab;
+  touch-action: none;
+}
+.gcf-karte-griff:hover {
+  background: var(--gcf-muted);
+}
+.gcf-karte-griff:active {
+  cursor: grabbing;
+}
 .gcf-schritt-zahl {
   flex: none;
   font: 600 12px/1 var(--gcf-schrift);

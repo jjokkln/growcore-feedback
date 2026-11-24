@@ -7,6 +7,7 @@ import type { Schritt } from "../core/ki-antwort.ts";
 import type { Ziel, ZielKatalog } from "../core/ziele.ts";
 import { useLocalStorageState } from "./hooks.ts";
 import { findeZiel, KI_UI_ATTR } from "./ziel-finden.ts";
+import { pfeilVersatz, ziehenStarten, type Versatz } from "./ziehen.ts";
 
 /**
  * Die Führung: markiert, was als Nächstes anzuklicken ist, und rückt weiter,
@@ -30,7 +31,8 @@ import { findeZiel, KI_UI_ATTR } from "./ziel-finden.ts";
  * Kein Rahmen und keine Karte mehr an der Stelle. Ein leuchtender Mauszeiger
  * gleitet aus dem KI-Fenster zur Stelle, „klickt“ dort (nur Animation, kein
  * echter Klick) und wiederholt das, bis wirklich geklickt oder abgebrochen
- * wird. Schritttext und Knöpfe stehen in einer schmalen Leiste unten mittig.
+ * wird. Schritttext und Knöpfe stehen in einer schmalen Leiste unten mittig,
+ * unabhängig vom KI-Fenster und am Griff verschiebbar.
  * Bei „weniger Bewegung“ steht der Zeiger still auf der Stelle.
  *
  * ─── Warum der Stand im localStorage liegt ──────────────────────────────────
@@ -102,6 +104,22 @@ export function Fuehrung({
   const karteRef = useRef<HTMLDivElement>(null);
   const elementRef = useRef<{ el: Element; vorstufe: boolean } | null>(null);
   const standRef = useRef(stand);
+  /** Selbst verschobene Lage der Schrittleiste; `null` = unten mittig. Gilt für die ganze Führung. */
+  const ortRef = useRef<Versatz | null>(null);
+
+  const verschieben = (basis: Versatz, d: Versatz) => {
+    const k = karteRef.current?.getBoundingClientRect();
+    const b = k?.width ?? 300;
+    const h = k?.height ?? 50;
+    ortRef.current = {
+      x: Math.min(Math.max(8, basis.x + d.x), window.innerWidth - b - 8),
+      y: Math.min(Math.max(8, basis.y + d.y), window.innerHeight - h - 8),
+    };
+  };
+  const jetzigeLage = (): Versatz => {
+    const k = karteRef.current?.getBoundingClientRect();
+    return { x: k?.left ?? 0, y: k?.top ?? 0 };
+  };
 
   useEffect(() => {
     standRef.current = stand;
@@ -158,22 +176,29 @@ export function Fuehrung({
       const welle = welleRef.current;
       const karte = karteRef.current;
       if (zeiger && welle && karte) {
-        // Leiste: unten mittig im freien Bereich links vom KI-Fenster. Liegt das
-        // Fenster quer über dem Bildschirm (Handy), sitzt sie direkt darüber.
+        // Leiste: unten mittig im Browserfenster, unabhängig vom KI-Fenster. Nur wenn
+        // das KI-Fenster quer über dem Bildschirm liegt (Handy), sitzt sie darüber.
+        // Selbst verschoben bleibt sie, wo sie hingezogen wurde.
         const k = karte.getBoundingClientRect();
         const fenster = document.getElementById("gcf-ki-fenster")?.getBoundingClientRect();
         const quer = fenster ? fenster.width > window.innerWidth * 0.6 : false;
-        const rechts = fenster && !quer ? fenster.left - 12 : window.innerWidth;
-        let kx = (rechts - k.width) / 2;
-        let ky = (quer && fenster ? fenster.top - 10 : window.innerHeight - 20) - k.height;
         const treffer = elementRef.current;
         const box = treffer?.el.getBoundingClientRect();
-        // Deckt die Leiste die Stelle zu, geht sie nach oben.
-        if (box && box.width > 0 && box.left < kx + k.width && box.right > kx && box.top < ky + k.height && box.bottom > ky) {
-          ky = 16;
+        let kx: number;
+        let ky: number;
+        if (ortRef.current) {
+          kx = Math.min(ortRef.current.x, window.innerWidth - k.width - 8);
+          ky = Math.min(ortRef.current.y, window.innerHeight - k.height - 8);
+        } else {
+          kx = (window.innerWidth - k.width) / 2;
+          ky = (quer && fenster ? fenster.top - 10 : window.innerHeight - 20) - k.height;
+          // Deckt die Leiste die Stelle zu, geht sie nach oben.
+          if (box && box.width > 0 && box.left < kx + k.width && box.right > kx && box.top < ky + k.height && box.bottom > ky) {
+            ky = 16;
+          }
         }
-        kx = Math.min(Math.max(12, kx), Math.max(12, window.innerWidth - k.width - 12));
-        ky = Math.max(12, ky);
+        kx = Math.max(8, kx);
+        ky = Math.max(8, ky);
         karte.style.transform = `translate3d(${Math.round(kx)}px, ${Math.round(ky)}px, 0)`;
         // Der Zeiger startet am KI-Fenster (eingeklappt: an der Leiste).
         const start = fenster ? { x: fenster.left + 28, y: fenster.top + 28 } : { x: kx + 24, y: ky + 12 };
@@ -278,6 +303,26 @@ export function Fuehrung({
         // Über dem KI-Fenster (2147483600).
         style={{ zIndex: EBENE + 400 }}
       >
+        <button
+          type="button"
+          className="gcf-karte-griff"
+          aria-label="Schrittleiste verschieben (Pfeiltasten)"
+          title="Verschieben"
+          onPointerDown={(e) => {
+            const basis = jetzigeLage();
+            ziehenStarten(e, { beiZug: (d) => verschieben(basis, d) });
+          }}
+          onKeyDown={(e) => {
+            const d = pfeilVersatz(e);
+            if (!d) return;
+            e.preventDefault();
+            verschieben(jetzigeLage(), d);
+          }}
+        >
+          <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden>
+            {[3, 8, 13].flatMap((y) => [2.5, 7.5].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.4" fill="currentColor" />))}
+          </svg>
+        </button>
         <span className="gcf-schritt-zahl" aria-label={`Schritt ${stand.index + 1} von ${stand.schritte.length}`}>
           {stand.index + 1}/{stand.schritte.length}
         </span>
