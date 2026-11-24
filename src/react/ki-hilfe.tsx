@@ -133,6 +133,8 @@ type KiHilfeProps = {
    * Die Einwilligung fragt dann nicht danach (0.16.5).
    */
   ohneName?: boolean;
+  /** „Hilfreich?“ mit Daumen unter jeder Antwort (0.17.0). Standard an; `false` blendet ihn aus (0.18.0). */
+  bewertung?: boolean;
 };
 
 /**
@@ -157,6 +159,7 @@ function KiHilfeInnen({
   begruessung: eigeneBegruessung,
   datensparsam = false,
   ohneName = false,
+  bewertung = true,
 }: KiHilfeProps) {
   const seite = normPfad(usePathname());
   const du = anrede === "du";
@@ -395,9 +398,6 @@ function KiHilfeInnen({
           {...(fuehrt ? { "data-fuehrung": "" } : {})}
         >
           <div className="gcf-ki-kopf">
-            <span className="gcf-ki-zeichen">
-              <Funken />
-            </span>
             <div style={{ minWidth: 0, flex: 1 }}>
               <h2 id="gcf-ki-titel" className="gcf-ki-titel">
                 KI-Assistent
@@ -442,7 +442,7 @@ function KiHilfeInnen({
                     onEntscheiden={(ja) => void entscheide(i, ja)}
                     bewertbar={n.rolle === "ki" && Boolean(n.frageId)}
                     bewertung={n.rolle === "ki" ? n.bewertung : undefined}
-                    onBewerten={(w) => bewerte(i, w)}
+                    onBewerten={bewertung ? (w) => bewerte(i, w) : undefined}
                   />
                 ))}
                 {verlauf.length === 0 && vorschlaege.length > 0 && (
