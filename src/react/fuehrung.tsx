@@ -213,8 +213,13 @@ export function Fuehrung({
         kx = Math.max(8, kx);
         ky = Math.max(8, ky);
         karte.style.transform = `translate3d(${Math.round(kx)}px, ${Math.round(ky)}px, 0)`;
-        // Der Zeiger startet am KI-Fenster (eingeklappt: an der Leiste).
-        const start = fenster ? { x: fenster.left + 28, y: fenster.top + 28 } : { x: kx + 24, y: ky + 12 };
+        // Der Zeiger startet am KI-Fenster, eingeklappt am Knopf „KI-Assistent“, sonst an der Leiste.
+        const knopf = fenster ? null : document.querySelector(".gcf-ki-knopf")?.getBoundingClientRect();
+        const start = fenster
+          ? { x: fenster.left + 28, y: fenster.top + 28 }
+          : knopf && knopf.width > 0
+            ? { x: knopf.left + 20, y: knopf.top + knopf.height / 2 }
+            : { x: kx + 24, y: ky + 12 };
 
         if (treffer && box && box.width > 0) {
           if (durchgang.el !== treffer.el) durchgang = { el: treffer.el, t0: jetzt };
@@ -350,7 +355,7 @@ export function Fuehrung({
         <span className="gcf-schritt-zahl" aria-label={`Schritt ${stand.index + 1} von ${stand.schritte.length}`}>
           {stand.index + 1}/{stand.schritte.length}
         </span>
-        <p className="gcf-karte-text" title={schritt.text}>
+        <p className="gcf-karte-text">
           {schritt.text}
           {gefunden === "vorstufe" && (
             <span className="gcf-leise"> {anrede === "du" ? "Erst das Menü öffnen." : "Erst das Menü öffnen."}</span>

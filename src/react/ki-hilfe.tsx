@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 
@@ -355,11 +355,22 @@ function KiHilfeInnen({
     else setze("erledigt", "An Lenny geschickt. Er entscheidet, ob daraus eine Aufgabe wird.");
   };
 
-  // Das Fenster bleibt offen: Wer „Zeigen" drückt, will danach weiterlesen
-  // oder nachfragen. Auf dem Handy schrumpft es während der Führung (CSS).
+  // Während der Führung klappt das Fenster ein (Lenny, 2026-11-24): Die Seite
+  // gehört dem Zeiger und der Schrittleiste. Ist die Führung vorbei, geht es
+  // wieder auf, damit man weiterlesen oder nachfragen kann.
+  const wiederOeffnen = useRef(false);
   const fuehren = (schritte: Schritt[], ab: number) => {
+    wiederOeffnen.current = true;
+    setOffen(false);
     starteFuehrung(schritte, ab);
   };
+  const beiFuehrung = useCallback((laeuftGerade: boolean) => {
+    setFuehrt(laeuftGerade);
+    if (!laeuftGerade && wiederOeffnen.current) {
+      wiederOeffnen.current = false;
+      setOffen(true);
+    }
+  }, []);
 
   // Ein offener Vorschlag zum Einkreisen zeigt seine Stelle schon vor dem Klick.
   const letzte = verlauf[verlauf.length - 1];
@@ -370,7 +381,7 @@ function KiHilfeInnen({
 
   return (
     <>
-      <Fuehrung ziele={ziele} onLaeuft={setFuehrt} anrede={anrede} />
+      <Fuehrung ziele={ziele} onLaeuft={beiFuehrung} anrede={anrede} />
       {offen && vorschau && <Vorschau el={vorschau} />}
       {!offen && (
         <button
