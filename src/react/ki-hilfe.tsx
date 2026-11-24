@@ -46,6 +46,8 @@ import { KI_UI_ATTR } from "./ziel-finden.ts";
  */
 
 const VERLAUF = "gcf-ki-verlauf-2";
+/** Dauer der Abtauch-Animation (feedback.css, gcf-ki-abtauchen). */
+const ABTAUCHEN_MS = 170;
 
 type Vorschlag =
   | { werkzeug: "stelle_markieren"; eingabe: MarkierenEingabe }
@@ -177,6 +179,18 @@ function KiHilfeInnen({
   const [status, setStatus] = useState<string | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [fuehrt, setFuehrt] = useState(false);
+  // Auf- und Abtauchen (0.18.0): Beim Einklappen bleibt das Fenster noch für die
+  // Dauer der Abtauch-Animation stehen, erst dann wird es entfernt.
+  const [gezeigt, setGezeigt] = useState(false);
+  useEffect(() => {
+    if (offen) {
+      setGezeigt(true);
+      return;
+    }
+    const ruhig = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const t = window.setTimeout(() => setGezeigt(false), ruhig ? 0 : ABTAUCHEN_MS);
+    return () => window.clearTimeout(t);
+  }, [offen]);
   const [einwilligung, setEinwilligung] = useLocalStorageState<string | null>(EINWILLIGUNG, null);
   const [, setLeisteOffen] = useLeisteOffen();
 
@@ -412,9 +426,10 @@ function KiHilfeInnen({
         </button>
       )}
 
-      {offen && (
+      {(offen || gezeigt) && (
         <div
           id="gcf-ki-fenster"
+          {...(!offen ? { "data-schliesst": "", inert: true } : {})}
           {...{ [KI_UI_ATTR]: "" }}
           role="dialog"
           aria-labelledby="gcf-ki-titel"
