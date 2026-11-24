@@ -332,11 +332,22 @@ Error generating stack: `+l.message+`
     height: min(40dvh, 340px);
   }
 }
+/* Einklappen nur als Zeichen, daf\xFCr deutlich als Knopf (0.18.0). */
 .gcf-ki-einklappen {
-  width: auto;
-  gap: 4px;
-  padding: 0 8px;
-  font: 500 12px/1 var(--gcf-schrift);
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--gcf-kante);
+  border-radius: 9px;
+  background: var(--gcf-muted);
+  color: var(--gcf-text);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.gcf-ki-einklappen:hover {
+  background: var(--gcf-kante);
+}
+.gcf-ki-hinweis {
+  margin: 1px 0 0;
+  font: 400 11px/1.35 var(--gcf-schrift);
   color: var(--gcf-leise);
 }
 
@@ -363,6 +374,24 @@ Error generating stack: `+l.message+`
     right: 16px;
     bottom: 16px;
     width: 390px;
+  }
+}
+/* W\xE4hrend einer F\xFChrung (0.18.0): kleiner und durchscheinend, die Seite bleibt
+   sichtbar. Mit der Maus dar\xFCber wieder voll da. */
+.gcf-ki-fenster[data-fuehrung] {
+  opacity: 0.8;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  transition: opacity 0.2s ease;
+}
+.gcf-ki-fenster[data-fuehrung]:hover,
+.gcf-ki-fenster[data-fuehrung]:focus-within {
+  opacity: 1;
+}
+@media (min-width: 768px) {
+  .gcf-ki-fenster[data-fuehrung] {
+    width: 330px;
+    height: min(46dvh, 380px);
   }
 }
 .gcf-ki-kopf {
@@ -569,6 +598,32 @@ Error generating stack: `+l.message+`
   background: var(--gcf-flaeche);
   color: var(--gcf-text);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+.gcf-karte-kompakt {
+  width: min(330px, calc(100vw - 24px));
+  padding: 12px;
+}
+/* Der Zeiger der F\xFChrung: gleitet aus dem KI-Fenster zur Stelle und klickt
+   (fuehrung.tsx bewegt ihn je Bild). Klicks gehen durch ihn hindurch. */
+.gcf-zeiger,
+.gcf-zeiger-welle {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: none;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.gcf-zeiger {
+  transform-origin: 3px 2px;
+  filter: drop-shadow(0 0 4px var(--gcf-primaer)) drop-shadow(0 0 12px var(--gcf-primaer));
+}
+.gcf-zeiger-welle {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 2px solid var(--gcf-primaer);
+  box-shadow: 0 0 16px var(--gcf-primaer);
 }
 .gcf-karte-text {
   margin: 4px 0 0;

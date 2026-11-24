@@ -366,7 +366,7 @@ function KiHilfeInnen({
 
   return (
     <>
-      <Fuehrung ziele={ziele} onZurKiHilfe={() => setOffen(true)} onLaeuft={setFuehrt} anrede={anrede} />
+      <Fuehrung ziele={ziele} onLaeuft={setFuehrt} anrede={anrede} />
       {offen && vorschau && <Vorschau el={vorschau} />}
       {!offen && (
         <button
@@ -401,7 +401,7 @@ function KiHilfeInnen({
               <h2 id="gcf-ki-titel" className="gcf-ki-titel">
                 KI-Assistent
               </h2>
-              <p className="gcf-klein">Antworten erzeugt eine KI (Claude von Anthropic). Sie kann sich irren.</p>
+              <p className="gcf-ki-hinweis">Antworten erzeugt eine KI (Claude von Anthropic). Sie kann sich irren.</p>
             </div>
             {/* Einklappen, nicht Schließen: Das Gespräch bleibt, der Knopf holt es zurück. */}
             <button
@@ -409,14 +409,14 @@ function KiHilfeInnen({
               className="gcf-icon-knopf gcf-ki-einklappen"
               aria-expanded
               aria-controls="gcf-ki-fenster"
-              title="KI-Assistent einklappen — das Gespräch bleibt erhalten"
+              aria-label="Einklappen"
+              title="Einklappen — das Gespräch bleibt erhalten"
               onClick={() => {
                 setOffen(false);
                 knopfRef.current?.focus();
               }}
             >
-              <Runter size={16} />
-              Einklappen
+              <Runter size={18} />
             </button>
           </div>
 

@@ -25,6 +25,14 @@ import { findeZiel, KI_UI_ATTR } from "./ziel-finden.ts";
  * Ein Klick auf eine VORSTUFE (Menüknopf auf dem Handy) rückt nicht weiter —
  * der eigentliche Link kommt erst danach.
  *
+ * ─── Zeiger statt Rahmen (0.18.0, Lenny 2026-11-24) ─────────────────────────
+ *
+ * Kein Rahmen und keine Karte mehr an der Stelle. Ein leuchtender Mauszeiger
+ * gleitet aus dem KI-Fenster zur Stelle, „klickt“ dort (nur Animation, kein
+ * echter Klick) und wiederholt das, bis wirklich geklickt oder abgebrochen
+ * wird. Schritttext und Knöpfe hängen als kleine Karte direkt am KI-Fenster.
+ * Bei „weniger Bewegung“ steht der Zeiger still auf der Stelle.
+ *
  * ─── Warum der Stand im localStorage liegt ──────────────────────────────────
  *
  * Aus demselben Grund wie beim Rundgang: Jede Seite rendert ihren Rahmen
@@ -61,24 +69,36 @@ export function starteFuehrung(schritte: Schritt[], ab = 0) {
   );
 }
 
+/** Ablauf eines Zeiger-Durchgangs in ms: hingleiten, klicken, kurz stehen, ausblenden. */
+const GLEITEN = 900;
+const KLICK = 650;
+const STEHEN = 650;
+const AUS = 250;
+const DURCHGANG = GLEITEN + KLICK + STEHEN + AUS;
+
+function sanft(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 export function Fuehrung({
   ziele,
-  onZurKiHilfe,
   onLaeuft,
   anrede = "Sie",
 }: {
   ziele: ZielKatalog;
   /** „du“ oder „Sie“ (Standard) für die Hinweise auf der Karte (0.10.0). */
   anrede?: "du" | "Sie";
-  onZurKiHilfe: () => void;
-  /** Meldet, ob gerade geführt wird — das KI-Fenster schrumpft dann auf dem Handy. */
+  /** Seit 0.18.0 ohne Wirkung: Das KI-Fenster bleibt während der Führung offen. */
+  onZurKiHilfe?: () => void;
+  /** Meldet, ob gerade geführt wird — das KI-Fenster wird dann kleiner und durchscheinend. */
   onLaeuft?: (laeuft: boolean) => void;
 }) {
   const pfad = usePathname();
   const [stand, setStand] = useLocalStorageState<Stand | null>(STAND, null);
   const [gefunden, setGefunden] = useState<"ja" | "vorstufe" | "nein">("nein");
 
-  const rahmenRef = useRef<HTMLDivElement>(null);
+  const zeigerRef = useRef<HTMLDivElement>(null);
+  const welleRef = useRef<HTMLDivElement>(null);
   const karteRef = useRef<HTMLDivElement>(null);
   const elementRef = useRef<{ el: Element; vorstufe: boolean } | null>(null);
   const standRef = useRef(stand);
@@ -128,28 +148,68 @@ export function Fuehrung({
     const erst = window.setTimeout(suchen, 60);
     const takt = window.setInterval(suchen, 250);
 
+    const ruhig = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Ein Durchgang beginnt neu, sobald das Ziel ein anderes Element ist.
+    let durchgang: { el: Element | null; t0: number } = { el: null, t0: 0 };
+
     let bild = 0;
-    const setzen = () => {
-      const rahmen = rahmenRef.current;
+    const setzen = (jetzt: number) => {
+      const zeiger = zeigerRef.current;
+      const welle = welleRef.current;
       const karte = karteRef.current;
-      const box = elementRef.current?.el.getBoundingClientRect();
-      if (rahmen && karte) {
+      if (zeiger && welle && karte) {
+        // Karte: direkt über dem KI-Fenster, rechtsbündig. Ohne Fenster unten rechts.
         const k = karte.getBoundingClientRect();
-        const unten = freiBis();
-        if (box && box.width > 0) {
-          const rand = 5;
-          rahmen.style.display = "block";
-          rahmen.style.transform = `translate3d(${Math.round(box.left - rand)}px, ${Math.round(box.top - rand)}px, 0)`;
-          rahmen.style.width = `${Math.round(box.width + rand * 2)}px`;
-          rahmen.style.height = `${Math.round(box.height + rand * 2)}px`;
-          const x = Math.min(Math.max(box.left, 12), Math.max(12, window.innerWidth - k.width - 12));
-          let y = box.bottom + 16;
-          if (y + k.height > unten - 12) y = box.top - k.height - 16;
-          if (y < 12) y = Math.max(12, unten - k.height - 12);
-          karte.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+        const fenster = document.getElementById("gcf-ki-fenster")?.getBoundingClientRect();
+        let kx = fenster ? fenster.right - k.width : window.innerWidth - k.width - 16;
+        let ky = fenster ? fenster.top - k.height - 10 : window.innerHeight - k.height - 16;
+        const treffer = elementRef.current;
+        const box = treffer?.el.getBoundingClientRect();
+        // Deckt die Karte die Stelle zu, geht sie nach oben.
+        if (box && box.width > 0 && box.left < kx + k.width && box.right > kx && box.top < ky + k.height && box.bottom > ky) {
+          ky = 12;
+        }
+        kx = Math.min(Math.max(12, kx), Math.max(12, window.innerWidth - k.width - 12));
+        ky = Math.max(12, ky);
+        karte.style.transform = `translate3d(${Math.round(kx)}px, ${Math.round(ky)}px, 0)`;
+
+        if (treffer && box && box.width > 0) {
+          if (durchgang.el !== treffer.el) durchgang = { el: treffer.el, t0: jetzt };
+          // Spitze des Zeigers auf die Mitte der Stelle.
+          const zx = box.left + Math.min(box.width / 2, 40);
+          const zy = box.top + box.height / 2;
+          // Start: linke obere Ecke der Karte, also aus dem KI-Fenster heraus.
+          const sx = kx + 24;
+          const sy = ky + 18;
+          const t = ruhig ? GLEITEN + KLICK : (jetzt - durchgang.t0) % DURCHGANG;
+          const g = sanft(Math.min(1, t / GLEITEN));
+          const x = sx + (zx - sx) * g;
+          const y = sy + (zy - sy) * g;
+          const c = t - GLEITEN;
+          let druck = 1;
+          let wellen = 0;
+          let deckung = 1;
+          if (!ruhig) {
+            if (c >= 0 && c < 120) druck = 1 - 0.2 * (c / 120);
+            else if (c >= 120 && c < 280) druck = 0.8 + 0.2 * ((c - 120) / 160);
+            if (c >= 90 && c < KLICK) wellen = (c - 90) / (KLICK - 90);
+            if (t < 150) deckung = t / 150;
+            else if (t > DURCHGANG - AUS) deckung = Math.max(0, (DURCHGANG - t) / AUS);
+          }
+          zeiger.style.display = "block";
+          zeiger.style.opacity = String(deckung);
+          zeiger.style.transform = `translate3d(${Math.round(x - 3)}px, ${Math.round(y - 2)}px, 0) scale(${druck.toFixed(3)})`;
+          if (wellen > 0) {
+            welle.style.display = "block";
+            welle.style.opacity = String((0.85 * (1 - wellen)).toFixed(3));
+            welle.style.transform = `translate3d(${Math.round(zx - 22)}px, ${Math.round(zy - 22)}px, 0) scale(${(0.35 + 1.4 * wellen).toFixed(3)})`;
+          } else {
+            welle.style.display = "none";
+          }
         } else {
-          rahmen.style.display = "none";
-          karte.style.transform = `translate3d(16px, ${Math.round(unten - k.height - 16)}px, 0)`;
+          durchgang = { el: null, t0: 0 };
+          zeiger.style.display = "none";
+          welle.style.display = "none";
         }
       }
       bild = requestAnimationFrame(setzen);
@@ -193,55 +253,43 @@ export function Fuehrung({
 
   return (
     <>
-      <div
-        ref={rahmenRef}
-        aria-hidden
-        className="gcf-rahmen"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          display: "none",
-          zIndex: EBENE,
-          pointerEvents: "none",
-          borderRadius: 10,
-        }}
-      />
+      <div ref={welleRef} aria-hidden className="gcf-zeiger-welle" style={{ zIndex: EBENE + 500 }} />
+      <div ref={zeigerRef} aria-hidden className="gcf-zeiger" style={{ zIndex: EBENE + 500 }}>
+        <svg width="26" height="30" viewBox="0 0 26 30" fill="none">
+          <path
+            d="M3 2.5 L3 24 L8.6 18.6 L12.4 27.2 L16.4 25.4 L12.7 17 L20.6 17 Z"
+            fill="#ffffff"
+            stroke="var(--gcf-primaer)"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
       <div
         ref={karteRef}
         {...{ [KI_UI_ATTR]: "" }}
         role="status"
         aria-live="polite"
-        className="gcf-karte"
-        // Über dem KI-Fenster (2147483600), das jetzt offen bleibt.
+        className="gcf-karte gcf-karte-kompakt"
+        // Über dem KI-Fenster (2147483600), das offen bleibt.
         style={{ zIndex: EBENE + 400 }}
       >
         <p className="gcf-eyebrow">
-          KI-Hilfe · Schritt {stand.index + 1} von {stand.schritte.length}
+          Schritt {stand.index + 1} von {stand.schritte.length}
         </p>
         <p className="gcf-karte-text">{schritt.text}</p>
-        <p className="gcf-klein">
-          {gefunden === "ja"
-            ? anrede === "du" ? "Klick auf die markierte Stelle." : "Klicken Sie auf die markierte Stelle."
-            : gefunden === "vorstufe"
-              ? anrede === "du" ? "Öffne zuerst das Menü (markiert)." : "Öffnen Sie zuerst das Menü (markiert)."
+        {gefunden !== "ja" && (
+          <p className="gcf-klein">
+            {gefunden === "vorstufe"
+              ? anrede === "du" ? "Öffne zuerst das Menü, der Zeiger zeigt es dir." : "Öffnen Sie zuerst das Menü, der Zeiger zeigt es Ihnen."
               : ziel
                 ? `Gesucht: ${ziel.name} — auf dieser Seite nicht zu sehen.`
-                : "Dafür gibt es keine feste Stelle zum Markieren."}
-        </p>
+                : "Dafür gibt es keine feste Stelle zum Zeigen."}
+          </p>
+        )}
         <div className="gcf-karte-leiste">
           <button type="button" onClick={() => setStand(null)} className="gcf-leise-knopf">
             Beenden
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setStand(null);
-              onZurKiHilfe();
-            }}
-            className="gcf-leise-knopf"
-          >
-            Zur KI-Hilfe
           </button>
           <span style={{ flex: 1 }} />
           <button
