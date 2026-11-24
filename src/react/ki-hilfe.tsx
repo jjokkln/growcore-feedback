@@ -135,6 +135,12 @@ type KiHilfeProps = {
   ohneName?: boolean;
   /** „Hilfreich?“ mit Daumen unter jeder Antwort (0.17.0). Standard an; `false` blendet ihn aus (0.18.0). */
   bewertung?: boolean;
+  /**
+   * Führung sofort starten, sobald eine Antwort Schritte mit Zielen hat (0.18.0, Lenny
+   * 2026-11-24): Der Zeiger erscheint ohne Klick auf „Schritt für Schritt zeigen“. Das
+   * Fenster klappt dabei ein und geht nach der Führung mit der ganzen Antwort wieder auf.
+   */
+  sofortZeigen?: boolean;
 };
 
 /**
@@ -160,6 +166,7 @@ function KiHilfeInnen({
   datensparsam = false,
   ohneName = false,
   bewertung = true,
+  sofortZeigen = false,
 }: KiHilfeProps) {
   const seite = normPfad(usePathname());
   const du = anrede === "du";
@@ -256,6 +263,7 @@ function KiHilfeInnen({
       }
       const leser = antwort.body.pipeThrough(new TextDecoderStream()).getReader();
       let rest = "";
+      let gesamt = "";
       for (;;) {
         const { value, done } = await leser.read();
         if (done) break;
@@ -267,6 +275,7 @@ function KiHilfeInnen({
           if (!ereignis) continue;
           if (ereignis.typ === "text") {
             setStatus(null);
+            gesamt += ereignis.text;
             aendereLetzte((e) => ({ ...e, text: e.text + ereignis.text }));
           } else if (ereignis.typ === "werkzeug") {
             setStatus(`Sieht nach: ${ereignis.label} …`);
@@ -284,6 +293,10 @@ function KiHilfeInnen({
       }
       // Leere Antwort ohne Vorschlag: lieber ein ehrlicher Satz als eine leere Blase.
       aendereLetzte((e) => (e.text.trim() || e.vorschlag ? e : { ...e, text: "Dazu habe ich gerade keine Antwort." }));
+      if (sofortZeigen && !abbruch.signal.aborted) {
+        const fertigeAntwort = leseAntwort(gesamt, bekannt);
+        if (fertigeAntwort.schritte.some((schritt) => schritt.ziel)) fuehren(fertigeAntwort.schritte, 0);
+      }
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       // Die Frage bleibt stehen, die leere Antwort nicht.
