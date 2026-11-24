@@ -376,24 +376,6 @@ Error generating stack: `+l.message+`
     width: 390px;
   }
 }
-/* W\xE4hrend einer F\xFChrung (0.18.0): kleiner und durchscheinend, die Seite bleibt
-   sichtbar. Mit der Maus dar\xFCber wieder voll da. */
-.gcf-ki-fenster[data-fuehrung] {
-  opacity: 0.8;
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  transition: opacity 0.2s ease;
-}
-.gcf-ki-fenster[data-fuehrung]:hover,
-.gcf-ki-fenster[data-fuehrung]:focus-within {
-  opacity: 1;
-}
-@media (min-width: 768px) {
-  .gcf-ki-fenster[data-fuehrung] {
-    width: 330px;
-    height: min(46dvh, 380px);
-  }
-}
 .gcf-ki-kopf {
   display: flex;
   align-items: flex-start;
@@ -440,16 +422,21 @@ Error generating stack: `+l.message+`
 }
 .gcf-ki-feld {
   flex: 1;
-  min-height: 40px;
+  min-height: 36px;
   max-height: 128px;
   resize: none;
   box-sizing: border-box;
-  padding: 9px 11px;
+  padding: 8px 10px;
   border: 1px solid var(--gcf-kante);
   border-radius: 9px;
   background: var(--gcf-grund);
   color: var(--gcf-text);
-  font: 400 14px/1.4 var(--gcf-schrift);
+  font: 400 13px/1.4 var(--gcf-schrift);
+}
+@supports (field-sizing: content) {
+  .gcf-ki-feld {
+    field-sizing: content;
+  }
 }
 .gcf-vorschlaege {
   display: flex;
@@ -599,9 +586,39 @@ Error generating stack: `+l.message+`
   color: var(--gcf-text);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
 }
-.gcf-karte-kompakt {
-  width: min(330px, calc(100vw - 24px));
-  padding: 12px;
+/* Schrittleiste der F\xFChrung (0.18.0): unten mittig, eine Zeile, Text h\xF6chstens zwei. */
+.gcf-karte-unten {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(620px, calc(100vw - 24px));
+  padding: 8px 8px 8px 14px;
+  border-radius: 14px;
+}
+.gcf-karte-unten .gcf-karte-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.gcf-karte-unten .gcf-knopf {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.gcf-schritt-zahl {
+  flex: none;
+  font: 600 12px/1 var(--gcf-schrift);
+  font-variant-numeric: tabular-nums;
+  color: var(--gcf-leise);
+}
+.gcf-karte-zu {
+  width: 30px;
+  height: 30px;
+  color: var(--gcf-leise);
 }
 /* Der Zeiger der F\xFChrung: gleitet aus dem KI-Fenster zur Stelle und klickt
    (fuehrung.tsx bewegt ihn je Bild). Klicks gehen durch ihn hindurch. */

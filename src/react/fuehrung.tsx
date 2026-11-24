@@ -30,7 +30,7 @@ import { findeZiel, KI_UI_ATTR } from "./ziel-finden.ts";
  * Kein Rahmen und keine Karte mehr an der Stelle. Ein leuchtender Mauszeiger
  * gleitet aus dem KI-Fenster zur Stelle, „klickt“ dort (nur Animation, kein
  * echter Klick) und wiederholt das, bis wirklich geklickt oder abgebrochen
- * wird. Schritttext und Knöpfe hängen als kleine Karte direkt am KI-Fenster.
+ * wird. Schritttext und Knöpfe stehen in einer schmalen Leiste unten mittig.
  * Bei „weniger Bewegung“ steht der Zeiger still auf der Stelle.
  *
  * ─── Warum der Stand im localStorage liegt ──────────────────────────────────
@@ -90,7 +90,7 @@ export function Fuehrung({
   anrede?: "du" | "Sie";
   /** Seit 0.18.0 ohne Wirkung: Das KI-Fenster bleibt während der Führung offen. */
   onZurKiHilfe?: () => void;
-  /** Meldet, ob gerade geführt wird — das KI-Fenster wird dann kleiner und durchscheinend. */
+  /** Meldet, ob gerade geführt wird — das KI-Fenster schrumpft dann auf dem Handy. */
   onLaeuft?: (laeuft: boolean) => void;
 }) {
   const pfad = usePathname();
@@ -158,29 +158,33 @@ export function Fuehrung({
       const welle = welleRef.current;
       const karte = karteRef.current;
       if (zeiger && welle && karte) {
-        // Karte: direkt über dem KI-Fenster, rechtsbündig. Ohne Fenster unten rechts.
+        // Leiste: unten mittig im freien Bereich links vom KI-Fenster. Liegt das
+        // Fenster quer über dem Bildschirm (Handy), sitzt sie direkt darüber.
         const k = karte.getBoundingClientRect();
         const fenster = document.getElementById("gcf-ki-fenster")?.getBoundingClientRect();
-        let kx = fenster ? fenster.right - k.width : window.innerWidth - k.width - 16;
-        let ky = fenster ? fenster.top - k.height - 10 : window.innerHeight - k.height - 16;
+        const quer = fenster ? fenster.width > window.innerWidth * 0.6 : false;
+        const rechts = fenster && !quer ? fenster.left - 12 : window.innerWidth;
+        let kx = (rechts - k.width) / 2;
+        let ky = (quer && fenster ? fenster.top - 10 : window.innerHeight - 20) - k.height;
         const treffer = elementRef.current;
         const box = treffer?.el.getBoundingClientRect();
-        // Deckt die Karte die Stelle zu, geht sie nach oben.
+        // Deckt die Leiste die Stelle zu, geht sie nach oben.
         if (box && box.width > 0 && box.left < kx + k.width && box.right > kx && box.top < ky + k.height && box.bottom > ky) {
-          ky = 12;
+          ky = 16;
         }
         kx = Math.min(Math.max(12, kx), Math.max(12, window.innerWidth - k.width - 12));
         ky = Math.max(12, ky);
         karte.style.transform = `translate3d(${Math.round(kx)}px, ${Math.round(ky)}px, 0)`;
+        // Der Zeiger startet am KI-Fenster (eingeklappt: an der Leiste).
+        const start = fenster ? { x: fenster.left + 28, y: fenster.top + 28 } : { x: kx + 24, y: ky + 12 };
 
         if (treffer && box && box.width > 0) {
           if (durchgang.el !== treffer.el) durchgang = { el: treffer.el, t0: jetzt };
           // Spitze des Zeigers auf die Mitte der Stelle.
           const zx = box.left + Math.min(box.width / 2, 40);
           const zy = box.top + box.height / 2;
-          // Start: linke obere Ecke der Karte, also aus dem KI-Fenster heraus.
-          const sx = kx + 24;
-          const sy = ky + 18;
+          const sx = start.x;
+          const sy = start.y;
           const t = ruhig ? GLEITEN + KLICK : (jetzt - durchgang.t0) % DURCHGANG;
           const g = sanft(Math.min(1, t / GLEITEN));
           const x = sx + (zx - sx) * g;
@@ -270,44 +274,35 @@ export function Fuehrung({
         {...{ [KI_UI_ATTR]: "" }}
         role="status"
         aria-live="polite"
-        className="gcf-karte gcf-karte-kompakt"
-        // Über dem KI-Fenster (2147483600), das offen bleibt.
+        className="gcf-karte gcf-karte-unten"
+        // Über dem KI-Fenster (2147483600).
         style={{ zIndex: EBENE + 400 }}
       >
-        <p className="gcf-eyebrow">
-          Schritt {stand.index + 1} von {stand.schritte.length}
+        <span className="gcf-schritt-zahl" aria-label={`Schritt ${stand.index + 1} von ${stand.schritte.length}`}>
+          {stand.index + 1}/{stand.schritte.length}
+        </span>
+        <p className="gcf-karte-text" title={schritt.text}>
+          {schritt.text}
+          {gefunden === "vorstufe" && (
+            <span className="gcf-leise"> {anrede === "du" ? "Erst das Menü öffnen." : "Erst das Menü öffnen."}</span>
+          )}
+          {gefunden === "nein" && ziel && <span className="gcf-leise"> ({ziel.name} ist hier nicht zu sehen.)</span>}
         </p>
-        <p className="gcf-karte-text">{schritt.text}</p>
-        {gefunden !== "ja" && (
-          <p className="gcf-klein">
-            {gefunden === "vorstufe"
-              ? anrede === "du" ? "Öffne zuerst das Menü, der Zeiger zeigt es dir." : "Öffnen Sie zuerst das Menü, der Zeiger zeigt es Ihnen."
-              : ziel
-                ? `Gesucht: ${ziel.name} — auf dieser Seite nicht zu sehen.`
-                : "Dafür gibt es keine feste Stelle zum Zeigen."}
-          </p>
-        )}
-        <div className="gcf-karte-leiste">
-          <button type="button" onClick={() => setStand(null)} className="gcf-leise-knopf">
-            Beenden
-          </button>
-          <span style={{ flex: 1 }} />
-          <button
-            type="button"
-            disabled={stand.index === 0}
-            onClick={() => setStand({ ...stand, index: stand.index - 1 })}
-            className="gcf-knopf"
-          >
+        {stand.index > 0 && (
+          <button type="button" onClick={() => setStand({ ...stand, index: stand.index - 1 })} className="gcf-knopf">
             Zurück
           </button>
-          <button
-            type="button"
-            onClick={() => setStand(letzter ? null : { ...stand, index: stand.index + 1 })}
-            className="gcf-knopf gcf-primaer"
-          >
-            {letzter ? "Fertig" : "Weiter"}
-          </button>
-        </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setStand(letzter ? null : { ...stand, index: stand.index + 1 })}
+          className="gcf-knopf gcf-primaer"
+        >
+          {letzter ? "Fertig" : "Weiter"}
+        </button>
+        <button type="button" onClick={() => setStand(null)} className="gcf-icon-knopf gcf-karte-zu" aria-label="Führung beenden" title="Beenden">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+        </button>
       </div>
     </>
   );

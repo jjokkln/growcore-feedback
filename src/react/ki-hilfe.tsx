@@ -223,6 +223,7 @@ function KiHilfeInnen({
     if (!frage || laeuft || !zugestimmt) return;
     setFehler(null);
     setEingabe("");
+    if (feldRef.current) feldRef.current.style.height = "";
     // Offene Vorschläge gelten als übergangen, sobald weitergefragt wird.
     const vorher = verlauf.map((e) =>
       e.rolle === "ki" && e.vorschlag?.stand === "offen"
@@ -475,7 +476,13 @@ function KiHilfeInnen({
                     id="gcf-ki-frage"
                     ref={feldRef}
                     value={eingabe}
-                    onChange={(e) => setEingabe(e.target.value)}
+                    onChange={(e) => {
+                      setEingabe(e.target.value);
+                      // Wächst mit dem Text bis max-height (CSS), statt darin zu scrollen (0.18.0).
+                      const f = e.currentTarget;
+                      f.style.height = "auto";
+                      f.style.height = `${f.scrollHeight + 2}px`;
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -484,7 +491,7 @@ function KiHilfeInnen({
                     }}
                     rows={1}
                     maxLength={2000}
-                    placeholder={du ? "Frag etwas oder beschreib eine Änderung …" : "Fragen Sie etwas oder beschreiben Sie eine Änderung …"}
+                    placeholder={du ? "Frag etwas …" : "Fragen Sie etwas …"}
                     className="gcf-ki-feld"
                   />
                   <button
