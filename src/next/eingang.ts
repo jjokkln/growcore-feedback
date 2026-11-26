@@ -117,8 +117,9 @@ export async function eingangStatus(): Promise<{
   ideen: boolean;
   bild: boolean;
   nachfrage: boolean;
+  verschieben: boolean;
 }> {
-  const aus = { an: false, assistent: false, ideen: false, bild: false, nachfrage: false };
+  const aus = { an: false, assistent: false, ideen: false, bild: false, nachfrage: false, verschieben: false };
   const schluessel = process.env.GROWCORE_FEEDBACK_KEY?.trim();
   if (!schluessel) return aus;
   const basis = (process.env.GROWCORE_FEEDBACK_URL?.trim() || STANDARD_URL).replace(/\/$/, "");
@@ -138,6 +139,7 @@ export async function eingangStatus(): Promise<{
       ideen?: unknown;
       bild?: unknown;
       nachfrage?: unknown;
+      verschieben?: unknown;
     };
     return {
       an: daten.an === true,
@@ -145,6 +147,7 @@ export async function eingangStatus(): Promise<{
       ideen: daten.ideen === true,
       bild: daten.bild === true,
       nachfrage: daten.nachfrage === true,
+      verschieben: daten.verschieben === true,
     };
   } catch (e) {
     console.error("[feedback] Eingang nicht erreichbar:", e instanceof Error ? e.message : e);

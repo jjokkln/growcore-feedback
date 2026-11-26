@@ -25,7 +25,7 @@ import { glaetteZug, type Form } from "../core/form.ts";
 import { istKnapp } from "../core/nachfrage.ts";
 import { ALLE_SEITEN, FARBNAME, FARBWERT, KUNDEN_FARBEN, agenturArt, vorname, type KundenFarbe, type Punkt } from "../core/konstanten.ts";
 // Nur Typen: zod bleibt aus dem Browser-Bündel.
-import type { Anmerkung, NeueAnmerkung, NeueIdee } from "../core/typen.ts";
+import type { Anmerkung, NeueAnmerkung, NeueIdee, NeueLage } from "../core/typen.ts";
 import { agenturAbmelden, useAgentur, type Agentur } from "./agentur.ts";
 import { stelleAlsBild } from "./bild.ts";
 import { feedbackApi, gespeicherterName, nameMerken } from "./client.ts";
@@ -97,6 +97,14 @@ type Entwurf = {
   zug?: { points: Punkt[]; fallback: Punkt[] };
   /** Im seitenweiten Kopf- oder Fußbereich: gilt auf allen Seiten (0.14.0). */
   global?: boolean;
+  /**
+   * Punktmarke (0.19.0): Anteil in der Ankerbox und Notnagel, gemessen IM MOMENT
+   * DES KLICKS. Vorher wurde erst beim Speichern gemessen — mit den Bildschirm-
+   * koordinaten vom Klick. Lief die Seite dazwischen (Scrollen beim Tippen,
+   * Einblend-Animation, nachladende Bilder), saß der Punkt danach woanders.
+   */
+  punkt?: Punkt;
+  notnagel?: Punkt;
   /**
    * Geglättet (0.13.0): Aus dem Gekritzel wurde eine Ellipse oder ein Rechteck.
    * `freihand` hält den Zug, wie er gezeichnet wurde — „Freihand zurück“ tauscht.
@@ -190,7 +198,7 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   const [offen, setOffen] = useState<string | null>(null);
   const [listeAufRoh, setListeAuf] = useState(false);
   /** Das Feld „Idee“ (0.12.0) — nur, wenn die Route Ideen annimmt. */
-  const { ideen, bild, nachfrage } = useFaehigkeiten();
+  const { ideen, bild, nachfrage, verschieben: kannVerschieben } = useFaehigkeiten();
   /** Die Rückfragen sind KI: Sie laufen nur mit der Einwilligung, die der Assistent einholt (0.17.0). */
   const kiErlaubt = useKiEinwilligung();
   const [ideeAufRoh, setIdeeAuf] = useState(false);
@@ -255,6 +263,8 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   // positioniert wie die gespeicherten — statisch bliebe er beim Scrollen
   // stehen, während die Seite darunter wegwandert.
   const entwurfRef = useRef<Entwurf | null>(null);
+  /** Ein Punkt, der gerade gezogen wird: Er folgt dem Zeiger statt seinem Anker (0.19.0). */
+  const punktZugRef = useRef<{ id: string; p: Versatz } | null>(null);
   const entwurfPfadRef = useRef<SVGPathElement | null>(null);
 
   // Leiste zu = Werkzeug weg: keine Punkte, keine Kreise, kein offenes Fenster
@@ -411,7 +421,8 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
         linien.push({ id: notiz.id, p: absetz, ziel });
 
         if (notiz.shape === "pin") {
-          const p = punkte[0];
+          const zug = punktZugRef.current;
+          const p = zug && zug.id === notiz.id ? zug.p : punkte[0];
           const el = knoten as HTMLElement;
           el.style.transform = `translate3d(${Math.round(p.x)}px, ${Math.round(p.y)}px, 0)`;
           const drin = p.y > -40 && p.y < window.innerHeight + 40;
@@ -612,20 +623,32 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
 
   const beiKlick = (e: React.MouseEvent) => {
     if (modus !== "kommentar") return;
+    // Ein Punkt wurde gerade gezogen und daneben losgelassen: kein neuer Kommentar.
+    if (geradeGezogenRef.current) {
+      geradeGezogenRef.current = false;
+      return;
+    }
     if (trifftKnopf(e.clientX, e.clientY)) {
       setLeisteOffen(false);
       return;
     }
     if (entwurf) return;
-    const getroffen = elementUnter(e.clientX, e.clientY);
+    setEntwurf({ x: e.clientX, y: e.clientY, ...stelleBei(e.clientX, e.clientY) });
+  };
+
+  /** Anker, Beschriftung, Anteil und Notnagel für einen Bildschirmpunkt, jetzt gemessen. */
+  const stelleBei = (x: number, y: number) => {
+    const getroffen = elementUnter(x, y);
     const anker = sektionsWurzel(getroffen);
-    setEntwurf({
-      x: e.clientX,
-      y: e.clientY,
-      anchor_selector: selektorPfad(anker) || "body",
+    const anchor_selector = selektorPfad(anker) || "body";
+    const box = ankerRahmen(anchor_selector);
+    return {
+      anchor_selector,
       anchor_label: stellenLabel(getroffen, anker, einstellung.datensparsam),
       global: istSeitenweit(anker),
-    });
+      punkt: box ? zuAnkerAnteil(x, y, box) : { x: 0, y: 0 },
+      notnagel: zuDokumentAnteil(x, y),
+    };
   };
 
   /**
@@ -664,13 +687,13 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
       return;
     }
 
-    const box = ankerRahmen(entwurf.anchor_selector);
+    const box = entwurf.punkt ? null : ankerRahmen(entwurf.anchor_selector);
     const ok = await speichere({
       ...gemeinsam,
       shape: "pin",
       body: text,
-      points: [box ? zuAnkerAnteil(entwurf.x, entwurf.y, box) : { x: 0, y: 0 }],
-      fallback: [zuDokumentAnteil(entwurf.x, entwurf.y)],
+      points: [entwurf.punkt ?? (box ? zuAnkerAnteil(entwurf.x, entwurf.y, box) : { x: 0, y: 0 })],
+      fallback: [entwurf.notnagel ?? zuDokumentAnteil(entwurf.x, entwurf.y)],
     });
     if (ok) fertig();
   };
@@ -824,6 +847,59 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
 
   /** Nach einem Zug am Zettel kommt ein `click` — der soll ihn nicht öffnen. */
   const geradeGezogenRef = useRef(false);
+
+  // ── Punkt an eine neue Stelle (0.19.0) ───────────────────────────────────
+  // Anders als beim Zettel wandert hier die Stelle selbst: Wo der Punkt
+  // losgelassen wird, wird neu verankert (Element, Anteil, Notnagel) und
+  // gespeichert. Nur eigene Punkte, Lenny mit Zugang die von GrowCore —
+  // dieselbe Regel wie beim Löschen, die Sammelstelle prüft sie noch einmal.
+  const darfVerschieben = (n: Anmerkung) =>
+    kannVerschieben && n.shape === "pin" && (n.eigen || Boolean(lenny && n.from_agency));
+
+  const punktZiehen = (n: Anmerkung, e: React.PointerEvent) => {
+    const lage = aktuellePunkte(n);
+    const start = lage?.punkte[0];
+    if (!start) return;
+    ziehenStarten(e, {
+      beiZug: (d) => {
+        punktZugRef.current = { id: n.id, p: { x: start.x + d.x, y: start.y + d.y } };
+      },
+      beiEnde: (d, bewegt) => {
+        geradeGezogenRef.current = bewegt;
+        if (!bewegt) {
+          punktZugRef.current = null;
+          return;
+        }
+        // Der `click` nach dem Loslassen landet auf dem Punkt ODER (losgelassen
+        // daneben) auf der Fläche; beide schlucken ihn. Kommt keiner, gilt der
+        // nächste Klick wieder.
+        window.setTimeout(() => {
+          geradeGezogenRef.current = false;
+        }, 0);
+        const x = Math.min(Math.max(start.x + d.x, 0), window.innerWidth - 1);
+        const y = Math.min(Math.max(start.y + d.y, 0), window.innerHeight - 1);
+        const stelle = stelleBei(x, y);
+        const neu: NeueLage = {
+          anchor_selector: stelle.anchor_selector,
+          anchor_label: stelle.anchor_label,
+          points: [stelle.punkt],
+          fallback: [stelle.notnagel],
+        };
+        void punktSpeichern(n, neu);
+      },
+    });
+  };
+
+  const punktSpeichern = async (n: Anmerkung, lage: NeueLage) => {
+    // Sofort an der neuen Stelle zeigen, bei einem Fehler zurück.
+    setAlle((alt) => alt.map((x) => (x.id === n.id ? { ...x, ...lage } : x)));
+    punktZugRef.current = null;
+    const antwort = await feedbackApi.verschieben(n.id, lage);
+    if (!antwort.ok) {
+      setAlle((alt) => alt.map((x) => (x.id === n.id ? n : x)));
+      setMeldung(antwort.fehler);
+    }
+  };
 
   // ── Ändern ───────────────────────────────────────────────────────────────
   const mitMeldung = async (aufruf: Promise<{ ok: true } | { ok: false; fehler: string }>) => {
@@ -1044,14 +1120,28 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               else markenRef.current.delete(n.id);
             }}
             data-gcf-marke=""
+            onPointerDown={(e) => {
+              if (!darfVerschieben(n)) return;
+              // Sonst setzt der Kommentar-Modus unter dem Punkt eine neue Anmerkung.
+              e.stopPropagation();
+              punktZiehen(n, e);
+            }}
             onClick={(e) => {
               e.stopPropagation();
+              if (geradeGezogenRef.current) {
+                geradeGezogenRef.current = false;
+                return;
+              }
               setOffen(offen === n.id ? null : n.id);
             }}
             aria-label={`${wer(n)} ${nummerVon(n)}${n.done ? ", erledigt" : ""}${
               n.replies.length ? `, ${n.replies.length} Antwort${n.replies.length === 1 ? "" : "en"}` : ""
             }: ${n.body ?? ""}`}
-            title={n.body ?? undefined}
+            title={
+              darfVerschieben(n)
+                ? `${n.body ?? ""}\n(Klicken zum Öffnen, ziehen zum Verschieben)`
+                : (n.body ?? undefined)
+            }
             style={{
               position: "absolute",
               top: 0,
@@ -1067,7 +1157,9 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
               color: "#fff",
               font: `600 12px/1 ${T.schrift}`,
               boxShadow: "0 1px 6px rgba(0,0,0,.35)",
-              cursor: "pointer",
+              cursor: darfVerschieben(n) ? "grab" : "pointer",
+              // Am Handy: Ein Zug am eigenen Punkt verschiebt ihn, statt die Seite zu scrollen.
+              touchAction: darfVerschieben(n) ? "none" : undefined,
               textDecoration: n.done ? "line-through" : "none",
             }}
           >

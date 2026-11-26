@@ -103,7 +103,7 @@ test("Schema: Umgebung und Bild sind optional, ein PNG oder ein zu großes Bild 
 test("Status meldet Bild und Nachfrage nur, wenn Sammelstelle und App es wollen", async () => {
   const route = () => feedbackRoute({ ki });
   const sage = async (r: ReturnType<typeof feedbackRoute>) => (await (await r.GET(anfrage("/status"))).json()) as Record<string, unknown>;
-  assert.deepEqual(await sage(route()), { an: true, assistent: true, ideen: true, bild: true, nachfrage: true });
+  assert.deepEqual(await sage(route()), { an: true, assistent: true, ideen: true, bild: true, nachfrage: true, verschieben: false });
 
   process.env.FEEDBACK_BILD = "0";
   assert.equal((await sage(route())).bild, false, "FEEDBACK_BILD=0 stellt das Bild in dieser App ab");

@@ -1,5 +1,5 @@
 import type { Stelle } from "../core/assistent.ts";
-import type { Anmerkung, Antwort, Autor, KiNachricht, NachfrageEingabe, NeueAnmerkung, NeueBewertung, NeueIdee } from "../core/typen.ts";
+import type { Anmerkung, Antwort, Autor, KiNachricht, NachfrageEingabe, NeueAnmerkung, NeueBewertung, NeueIdee, NeueLage } from "../core/typen.ts";
 import type { SammelstellenWissen } from "./anweisungen.ts";
 import { eingang, eingangPersonen, eingangStatus, eingangStrom } from "./eingang.ts";
 import { nachfrageAntwortSchema } from "../core/typen.ts";
@@ -45,6 +45,12 @@ export interface FeedbackSpeicher {
   antworten(id: string, body: string, autor: Autor, agentur?: string | null): Promise<void>;
   erledigt(id: string, done: boolean, autor: Autor): Promise<void>;
   loeschen(id: string, autor: Autor, agentur?: string | null): Promise<void>;
+  /**
+   * Optional (0.19.0): eine Punktmarke an eine neue Stelle setzen. Rechte wie beim
+   * Löschen (nur eigene, Lenny mit Zugang die von GrowCore) prüft der Speicher.
+   * Ohne diese Funktion lassen sich Punkte nicht verschieben.
+   */
+  verschieben?(id: string, lage: NeueLage, autor: Autor, agentur?: string | null): Promise<void>;
   /**
    * @deprecated Seit 0.12.0 ungenutzt: Die Sammelstelle hält die Frage selbst fest,
    * wenn sie den Assistenten beantwortet (`assistent`). Bleibt nur, damit eigene
@@ -105,6 +111,8 @@ export type SammelstellenStatus = {
   bild?: boolean;
   /** 0.17.0: Die Sammelstelle beantwortet Rückfragen zu knappen Anmerkungen. */
   nachfrage?: boolean;
+  /** 0.19.0: Die Sammelstelle nimmt eine neue Stelle für Punktmarken an (PATCH mit `lage`). */
+  verschieben?: boolean;
 };
 
 /** Der Standard: alles über den Projektschlüssel an den Eingang im Projektraum. */
@@ -128,6 +136,12 @@ export const eingangsSpeicher: FeedbackSpeicher = {
   },
   loeschen: async (id, autor, agentur) => {
     await eingang(`/anmerkungen/${id}`, { method: "DELETE", body: { author: autor, ...(agentur ? { agentur } : {}) } });
+  },
+  verschieben: async (id, lage, autor, agentur) => {
+    await eingang(`/anmerkungen/${id}`, {
+      method: "PATCH",
+      body: { lage, author: autor, ...(agentur ? { agentur } : {}) },
+    });
   },
   assistent: (anfrage, signal) => eingangStrom("/assistent", anfrage, signal),
   idee: async (idee, autor) => {

@@ -5,6 +5,7 @@ import {
   bewertungSchema,
   nachfrageSchema,
   erledigtSchema,
+  verschiebenSchema,
   ideeSchema,
   neueAnmerkungSchema,
   type Anmerkung,
@@ -162,6 +163,9 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
   // braucht deshalb `KI_HILFE=1` (dieselbe Einwilligung wie beim Assistenten).
   const bildAn = async () =>
     Boolean(speicher.erweitert) && process.env.FEEDBACK_BILD !== "0" && (await sammelstelle()).bild === true;
+  // Verschieben (0.19.0): nur, wenn die Sammelstelle es ausdrücklich meldet. Eine ältere
+  // Sammelstelle würde ein PATCH mit `lage` als „ungültige Änderung“ abweisen.
+  const verschiebenAn = async () => Boolean(speicher.verschieben) && (await sammelstelle()).verschieben === true;
   const nachfrageAn = async () =>
     Boolean(speicher.nachfrage) && process.env.KI_HILFE === "1" && (await sammelstelle()).nachfrage === true;
 
@@ -189,6 +193,7 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
         ideen: await ideenAn(),
         bild: await bildAn(),
         nachfrage: await nachfrageAn(),
+        verschieben: await verschiebenAn(),
       });
     }
     if (!(await zentralAn())) return fehler(404, "Das Feedback-Werkzeug ist ausgeschaltet.");
@@ -249,7 +254,14 @@ export function feedbackRoute(optionen: FeedbackRouteOptionen = {}) {
       return json({ ok: true }, 201);
     }
     if (methode === "PATCH" && !unter) {
-      const eingabe = erledigtSchema.safeParse(await leseJson(request));
+      const roh = await leseJson(request);
+      const lage = verschiebenSchema.safeParse(roh);
+      if (lage.success) {
+        if (!speicher.verschieben || !(await verschiebenAn())) return fehler(501, "Verschieben geht hier nicht.");
+        await speicher.verschieben(id, lage.data.lage, autor, agenturAus(request));
+        return json({ ok: true });
+      }
+      const eingabe = erledigtSchema.safeParse(roh);
       if (!eingabe.success) return fehler(400, "Ungültige Änderung.");
       await speicher.erledigt(id, eingabe.data.done, autor);
       return json({ ok: true });

@@ -5,7 +5,7 @@
  * ist der Nachweis „das ist meine Anmerkung" und wird nur an den eigenen
  * Server geschickt, nie an andere Besucher ausgeliefert.
  */
-import type { Anmerkung, NeueAnmerkung, NeueBewertung, NeueIdee } from "../core/typen.ts";
+import type { Anmerkung, NeueAnmerkung, NeueBewertung, NeueIdee, NeueLage } from "../core/typen.ts";
 import { agenturZugang } from "./agentur.ts";
 
 const BASIS = "/api/feedback";
@@ -97,6 +97,9 @@ export const feedbackApi = {
     rufe<{ ok: true }>(`/anmerkungen/${id}/antworten`, { method: "POST", body: JSON.stringify({ body }) }),
   erledigt: (id: string, done: boolean) =>
     rufe<{ ok: true }>(`/anmerkungen/${id}`, { method: "PATCH", body: JSON.stringify({ done }) }),
+  /** 0.19.0: Punktmarke an eine neue Stelle (nur eigene; die Sammelstelle prüft). */
+  verschieben: (id: string, lage: NeueLage) =>
+    rufe<{ ok: true }>(`/anmerkungen/${id}`, { method: "PATCH", body: JSON.stringify({ lage }) }),
   loeschen: (id: string) => rufe<{ ok: true }>(`/anmerkungen/${id}`, { method: "DELETE", body: "{}" }),
   /** 0.12.0: eine Idee an Lenny (im Projektraum ein Vorschlag). */
   idee: (idee: NeueIdee) => rufe<{ ok: true }>("/ideen", { method: "POST", body: JSON.stringify(idee) }),

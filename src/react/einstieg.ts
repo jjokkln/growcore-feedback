@@ -84,8 +84,8 @@ export function useLeisteOffen(): [boolean, (offen: boolean) => void] {
  */
 let an: boolean | null = null;
 /** Welche Teile die Route anbietet (0.12.0). Ältere Routen melden nichts → beides aus. */
-export type Faehigkeiten = { assistent: boolean; ideen: boolean; bild: boolean; nachfrage: boolean };
-const KEINE: Faehigkeiten = { assistent: false, ideen: false, bild: false, nachfrage: false };
+export type Faehigkeiten = { assistent: boolean; ideen: boolean; bild: boolean; nachfrage: boolean; verschieben: boolean };
+const KEINE: Faehigkeiten = { assistent: false, ideen: false, bild: false, nachfrage: false, verschieben: false };
 let faehigkeiten: Faehigkeiten = KEINE;
 let laeuft = false;
 let zuletzt = 0;
@@ -106,6 +106,7 @@ async function anFragen(): Promise<void> {
           ideen?: unknown;
           bild?: unknown;
           nachfrage?: unknown;
+          verschieben?: unknown;
         })
       : {};
     neu = daten.an === true;
@@ -115,6 +116,7 @@ async function anFragen(): Promise<void> {
           ideen: daten.ideen === true,
           bild: daten.bild === true,
           nachfrage: daten.nachfrage === true,
+          verschieben: daten.verschieben === true,
         }
       : KEINE;
   } catch {
@@ -125,7 +127,8 @@ async function anFragen(): Promise<void> {
     teile.assistent !== faehigkeiten.assistent ||
     teile.ideen !== faehigkeiten.ideen ||
     teile.bild !== faehigkeiten.bild ||
-    teile.nachfrage !== faehigkeiten.nachfrage;
+    teile.nachfrage !== faehigkeiten.nachfrage ||
+    teile.verschieben !== faehigkeiten.verschieben;
   if (teileNeu) faehigkeiten = teile;
   if (neu !== an || teileNeu) {
     an = neu;

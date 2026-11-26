@@ -158,6 +158,19 @@ export const nachfrageAntwortSchema = z.object({ fragen: z.array(z.string().trim
 
 export const erledigtSchema = z.object({ done: z.boolean() });
 
+/**
+ * Neue Stelle einer Punktmarke (0.19.0): Anker, Beschriftung, Anteil und Notnagel
+ * kommen immer zusammen, sonst passen Selektor und Punkt nicht mehr zueinander.
+ */
+export const lageSchema = z.object({
+  anchor_selector: z.string().min(1).max(500),
+  anchor_label: z.string().trim().min(1).max(120),
+  points: z.array(punkt).length(1),
+  fallback: z.array(punkt).length(1),
+});
+export type NeueLage = z.infer<typeof lageSchema>;
+export const verschiebenSchema = z.object({ lage: lageSchema });
+
 /** Eine Stelle der Seite, die der KI-Assistent einkreisen kann (0.12.0). Nur Beschriftungen, kein Markup. */
 export const stelleSchema = z.object({
   id: z.string().regex(/^s\d{1,3}$/),
