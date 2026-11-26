@@ -851,10 +851,10 @@ function Overlay({ projekt, einstellung }: { projekt: string; einstellung: Overl
   // ── Punkt an eine neue Stelle (0.19.0) ───────────────────────────────────
   // Anders als beim Zettel wandert hier die Stelle selbst: Wo der Punkt
   // losgelassen wird, wird neu verankert (Element, Anteil, Notnagel) und
-  // gespeichert. Nur eigene Punkte, Lenny mit Zugang die von GrowCore —
-  // dieselbe Regel wie beim Löschen, die Sammelstelle prüft sie noch einmal.
-  const darfVerschieben = (n: Anmerkung) =>
-    kannVerschieben && n.shape === "pin" && (n.eigen || Boolean(lenny && n.from_agency));
+  // gespeichert. Besucher nur ihre eigenen Punkte; Lenny mit Zugang JEDEN
+  // (0.19.1, Lenny 2026-11-26: Ein Kundenpunkt an der falschen Stelle ist
+  // genau der Fall, den er korrigieren will). Die Sammelstelle prüft es noch einmal.
+  const darfVerschieben = (n: Anmerkung) => kannVerschieben && n.shape === "pin" && (n.eigen || Boolean(lenny));
 
   const punktZiehen = (n: Anmerkung, e: React.PointerEvent) => {
     const lage = aktuellePunkte(n);

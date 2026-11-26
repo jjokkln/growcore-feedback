@@ -262,6 +262,8 @@ Der Schalter gilt genauso: sichtbar erst bei `{ an: true }` von `/api/feedback/s
 
 ## Änderungen
 
+- **v0.19.1** (2026-11-26): **Lenny mit Zugang verschiebt jeden Punkt**, auch die der Kunden (Besucher weiter nur ihre eigenen). Braucht den Projektraum ab Commit „Feedback: Lenny verschiebt jeden Punkt“.
+
 - **v0.19.0** (2026-11-26): **Punkte nachträglich verschieben, Punkt sitzt dort, wo geklickt wurde.**
   - **Eigene Punktmarken lassen sich ziehen** (Lenny mit Zugang: die von GrowCore). Losgelassen wird neu verankert (Element, Anteil, Notnagel, Beschriftung) und per `PATCH /anmerkungen/:id` mit `{ lage }` gespeichert. Nur mit Status `verschieben` der Sammelstelle; ältere Sammelstellen melden es nicht, dann bleibt alles wie bisher. Eingekreiste Bereiche bleiben fest, dort lässt sich wie bisher nur der Zettel schieben.
   - **Verankerung im Moment des Klicks** statt beim Speichern. Vorher wurde der Anteil in der Ankerbox erst nach dem Tippen gemessen, mit den Bildschirmkoordinaten vom Klick: Scrollte oder animierte die Seite dazwischen, saß der Punkt danach woanders (Corpus Contour, 2026-11-26).
